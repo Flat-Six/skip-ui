@@ -413,6 +413,11 @@ public struct NavigationStack : View, Renderable {
                         measuredTopBarPresentationTopPx.value = nil
                     }
                 }
+                // the status bar's icons by the bar's colour scheme where the bar draws behind them, as iOS's (Flat-Six
+                // patch): light over a dark header in the light appearance too
+                if hasAbsoluteTopSystemBar, let barScheme = topBarPreferences?.colorScheme {
+                    SyncStatusBarIcons(lightAppearance: barScheme == ColorScheme.light)
+                }
                 let isOverlapped = scrollBehavior.state.overlappedFraction > 0
                 let materialColorScheme: androidx.compose.material3.ColorScheme
                 if isOverlapped, let customColorScheme = topBarPreferences?.colorScheme?.asMaterialTheme() {

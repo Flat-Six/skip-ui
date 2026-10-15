@@ -274,6 +274,26 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
     }
 }
 
+/// The status bar's icons for a light ground (dark icons) or a dark one while composed, and as they were after
+/// (Flat-Six patch): a navigation bar drawn behind the status bar sets them by its colour scheme, as iOS's does.
+@Composable func SyncStatusBarIcons(lightAppearance: Bool) {
+    let view = LocalView.current
+    DisposableEffect(lightAppearance) {
+        let window = (view.parent as? DialogWindowProvider)?.window ?? UIApplication.shared.androidActivity?.window
+        var previous: Bool? = nil
+        if let window {
+            let controller = WindowCompat.getInsetsController(window, view)
+            previous = controller.isAppearanceLightStatusBars
+            controller.isAppearanceLightStatusBars = lightAppearance
+        }
+        onDispose {
+            if let window, let previous {
+                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = previous
+            }
+        }
+    }
+}
+
 @Composable private func SyncSystemBarsWithTheme() {
     let view = LocalView.current
     let dark = MaterialTheme.colorScheme.background.luminance() < 0.5
