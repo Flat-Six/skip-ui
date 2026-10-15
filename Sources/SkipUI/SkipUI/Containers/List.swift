@@ -796,7 +796,13 @@ public final class List : View, Renderable {
         let listItemModifier = ListItemModifier.combined(for: itemRenderable)
         var itemModifier: Modifier = Modifier
         if listItemModifier?.background == nil {
-            itemModifier = itemModifier.background(BackgroundColor(styling: styling.withStyle(ListStyle.plain), isItem: isItem))
+            // a grouped list's rows in its cells' colour, a plain list's in the page's (Flat-Six patch: the two differ in
+            // iOS's dark)
+            if isItem && styling.style != ListStyle.plain {
+                itemModifier = itemModifier.background(Color.groupedCellBackground.colorImpl())
+            } else {
+                itemModifier = itemModifier.background(BackgroundColor(styling: styling.withStyle(ListStyle.plain), isItem: isItem))
+            }
         }
         // Where a grouped list's ground is hidden, its sections' rounded corners are their rows', clipped, as SwiftUI's
         // (Flat-Six patch): Skip paints the corners in the ground, clear there, so the cards were square and their

@@ -199,7 +199,15 @@ public struct Color: ShapeStyle, Renderable, Hashable {
         return colorInfo?.colorImpl(colorScheme: colorScheme)
     }
 
+    /// iOS's systemBackground: the colour scheme's background role (Flat-Six patch). Skip took its surface, which it
+    /// also gives a grouped list's cells — one colour in the light, two in iOS's dark (#000 under #1C1C1E cells), so a
+    /// page's ground, and the tiles a card draws in it, came out the cells' grey.
     static let background = Color(colorImpl: {
+        MaterialTheme.colorScheme.background
+    })
+
+    /// A grouped list's cells, iOS's secondarySystemGroupedBackground: the colour scheme's surface (Flat-Six patch).
+    static let groupedCellBackground = Color(colorImpl: {
         MaterialTheme.colorScheme.surface
     })
 
