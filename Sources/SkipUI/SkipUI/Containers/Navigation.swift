@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
@@ -598,11 +599,20 @@ public struct NavigationStack : View, Renderable {
                             options = updateOptions(options)
                         }
                         BottomAppBar(modifier: options.modifier, containerColor: options.containerColor, contentColor: options.contentColor, tonalElevation: options.tonalElevation, contentPadding: options.contentPadding, windowInsets: windowInsets) {
-                            // Use an HStack so that it sets up the environment for bottom toolbar Spacers
-                            HStack(spacing: 24.0) {
+                            // Use an HStack so that it sets up the environment for bottom toolbar Spacers. The spacing goes
+                            // between neighbouring items only, never beside a spacer, as SwiftUI spaces a bar: an HStack of
+                            // one ComposeView can't tell its spacers, and spaced them all (Flat-Six patch).
+                            HStack(spacing: 0.0) {
                                 ComposeView { context in
+                                    var lastWasSpacer: Bool? = nil
                                     for renderable in bottomItems {
+                                        let stripped = renderable.strip()
+                                        let isSpacer = stripped is Spacer || stripped is ToolbarSpacer
+                                        if let lastWasSpacer, !lastWasSpacer && !isSpacer {
+                                            androidx.compose.foundation.layout.Spacer(modifier: Modifier.width(24.dp))
+                                        }
                                         renderable.Render(context: context)
+                                        lastWasSpacer = isSpacer
                                     }
                                 }
                             }.Compose(context)
