@@ -11,6 +11,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 #elseif canImport(CoreGraphics)
 import struct CoreGraphics.CGFloat
 #endif
@@ -165,7 +167,11 @@ public struct Font : Hashable {
     public static func system(size: CGFloat, weight: Font.Weight? = nil, design: Font.Design? = nil) -> Font {
         #if SKIP
         return Font(fontImpl: {
-            androidx.compose.ui.text.TextStyle(fontSize: size.sp, fontWeight: fontWeight(for: weight), fontFamily: fontFamily(for: design))
+            // A fixed size, as SwiftUI's: Dynamic Type scales a text style, never a point size (Flat-Six patch). In sp
+            // it grew with Android's font scale — twice over at its largest, where iOS keeps it — so it is the sp that
+            // draws these points at the scale on screen (the inverse of the nonlinear scale's curve)
+            let fixedSize = with(LocalDensity.current) { size.dp.toSp() }
+            androidx.compose.ui.text.TextStyle(fontSize: fixedSize, fontWeight: fontWeight(for: weight), fontFamily: fontFamily(for: design))
         })
         #else
         fatalError()
