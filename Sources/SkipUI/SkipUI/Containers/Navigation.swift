@@ -19,6 +19,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
@@ -85,6 +86,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -527,18 +529,31 @@ public struct NavigationStack : View, Renderable {
                                             ) { backIcon() }
                                         case Material3TopAppBarNavigationIconButtonStyle.iconButton:
                                             // iOS's back button (Flat-Six patch): the chevron and the page before's title
-                                            // in the tint, not Material's arrow. As iOS: the title where it fits beside this
-                                            // page's centred one, else "Back", else the chevron alone (a 17 pt character is
-                                            // about half the width of a centred one's share of the bar)
+                                            // in the tint, not Material's arrow. As UIKit: the title where it ends 8 pt short
+                                            // of this page's centred one, else "Back", else the chevron alone — measured
+                                            // against the bar's own width (the navigation icon's slot spans the bar), so a
+                                            // tablet's bar takes titles a phone's cannot (it had a phone's budget of 21
+                                            // characters). In iOS's measures, so it chooses as iOS does: the label 34 pt in,
+                                            // and SF a little wider than Roboto (the same words in both books: 1.02 at 17
+                                            // regular, 1.045 at 17 semibold, the inline title's)
                                             let previousTitleText = navigator.value.previousState(before: state)?.title
                                             let previousTitle = previousTitleText?.localizedTextString() ?? ""
-                                            let ownTitleRoom = Double(hasTitle ? title.localizedTextString().count : 0) * 0.53
-                                            // a page before titled "" leaves the chevron alone, as on iOS
-                                            let backTitle = previousTitleText != nil && previousTitle.isEmpty ? "" : (!previousTitle.isEmpty && Double(previousTitle.count) + ownTitleRoom <= 21.0 ? previousTitle : (4.0 + ownTitleRoom <= 21.0 ? "Back" : ""))
-                                            Row(modifier: Modifier.clickable(interactionSource: nil, indication: nil, onClick: { navigator.value.navigateBack() }).height(44.dp).padding(start: 2.dp, end: 8.dp), verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
-                                                Icon(imageVector: Icons.AutoMirrored.Filled.ArrowBackIos, contentDescription: "Back", tint: tint.colorImpl(), modifier: Modifier.size(22.dp))
-                                                if !backTitle.isEmpty {
-                                                    androidx.compose.material3.Text(text: backTitle, color: tint.colorImpl(), style: MaterialTheme.typography.bodyLarge, maxLines: 1)
+                                            let measurer = rememberTextMeasurer()
+                                            let density = LocalDensity.current
+                                            let labelStyle = MaterialTheme.typography.bodyLarge
+                                            let titleWidth = hasTitle ? with(density) { Double(measurer.measure(text: title.localizedTextString(), style: MaterialTheme.typography.titleMedium).size.width.toDp().value) } * 1.045 : 0.0
+                                            let previousWidth = previousTitle.isEmpty ? 0.0 : with(density) { Double(measurer.measure(text: previousTitle, style: labelStyle).size.width.toDp().value) } * 1.02
+                                            let backWidth = with(density) { Double(measurer.measure(text: "Back", style: labelStyle).size.width.toDp().value) } * 1.02
+                                            BoxWithConstraints {
+                                                // the slot is the bar's width less Material's 4 dp at its start
+                                                let room = (Double(maxWidth.value) + 4.0 - titleWidth) / 2.0 - 34.0 - 8.0
+                                                // a page before titled "" leaves the chevron alone, as on iOS
+                                                let backTitle = previousTitleText != nil && previousTitle.isEmpty ? "" : (!previousTitle.isEmpty && previousWidth <= room ? previousTitle : (backWidth <= room ? "Back" : ""))
+                                                Row(modifier: Modifier.clickable(interactionSource: nil, indication: nil, onClick: { navigator.value.navigateBack() }).height(44.dp).padding(start: 2.dp, end: 8.dp), verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
+                                                    Icon(imageVector: Icons.AutoMirrored.Filled.ArrowBackIos, contentDescription: "Back", tint: tint.colorImpl(), modifier: Modifier.size(22.dp))
+                                                    if !backTitle.isEmpty {
+                                                        androidx.compose.material3.Text(text: backTitle, color: tint.colorImpl(), style: labelStyle, maxLines: 1)
+                                                    }
                                                 }
                                             }
                                         }
