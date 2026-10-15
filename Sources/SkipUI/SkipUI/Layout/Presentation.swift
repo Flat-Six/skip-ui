@@ -154,6 +154,10 @@ private let AlertDialogMaxWidth: Dp = 560.dp
                 let inset: Dp
                 let screenHeight = LocalConfiguration.current.screenHeightDp.dp
                 let detent: PresentationDetent = reducedDetentPreferences.detent
+                // iOS's drag indicator (Flat-Six patch): a large sheet shows it only when asked for, and without it
+                // keeps no 44 dp drag area above its content — its top 24 below the status bar, as iOS's; a shorter
+                // detent, which iOS lets the user resize, shows it unless it is hidden
+                var isLargeDetent = false
                 switch detent {
                 case .medium:
                     inset = screenHeight / 2
@@ -169,8 +173,10 @@ private let AlertDialogMaxWidth: Dp = 560.dp
                     // We have to delay access to WindowInsets until inside the ModalBottomSheet composable to get accurate values
                     let topBarHeight = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
                     // Add 44 for draggable area in case content is not draggable
-                    inset = topBarHeight + (24 * sheetDepth).dp + 44.dp
+                    isLargeDetent = true
+                    inset = topBarHeight + (24 * sheetDepth).dp + (reducedDragIndicatorVisibility == Visibility.visible ? 44.dp : 0.dp)
                 }
+                let showsDragIndicator = isLargeDetent ? reducedDragIndicatorVisibility == Visibility.visible : reducedDragIndicatorVisibility != Visibility.hidden
 
                 topInset.value = inset
                 // Draw the drag handle and the presentation root content area below it
@@ -178,7 +184,7 @@ private let AlertDialogMaxWidth: Dp = 560.dp
                 Row(modifier: Modifier.fillMaxWidth(), horizontalArrangement: Arrangement.Center) {
                     // Honor `presentationDragIndicator(.hidden)` by suppressing the capsule while
                     // preserving its vertical footprint so the content does not shift.
-                    if reducedDragIndicatorVisibility == Visibility.hidden {
+                    if !showsDragIndicator {
                         androidx.compose.foundation.layout.Spacer(modifier: Modifier.height(handleHeight))
                     } else {
                         Capsule().fill(Color.primary.opacity(0.4)).frame(width: 60.0, height: Double(handleHeight.value)).Compose(context: context)
