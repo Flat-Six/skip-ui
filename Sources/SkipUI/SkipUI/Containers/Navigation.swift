@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.filled.ArrowBack
@@ -1948,7 +1949,9 @@ public struct NavigationLink : View, Renderable {
 
     @Composable static func RenderChevron() {
         let isRTL = EnvironmentValues.shared.layoutDirection == .rightToLeft
-        Icon(imageVector: isRTL ? Icons.Outlined.KeyboardArrowLeft : Icons.Outlined.KeyboardArrowRight, contentDescription: nil, tint: MaterialTheme.colorScheme.outlineVariant)
+        // As tall as its glyph, as iOS's disclosure chevron is (Flat-Six patch): Material's 24 dp box made a link's row
+        // 46 dp to iOS's 44. The glyph keeps its size and place; only the box the row measures is cut to it.
+        Icon(imageVector: isRTL ? Icons.Outlined.KeyboardArrowLeft : Icons.Outlined.KeyboardArrowRight, contentDescription: nil, modifier: Modifier.height(12.dp).wrapContentHeight(unbounded: true), tint: MaterialTheme.colorScheme.outlineVariant)
     }
 
     @Composable internal func navigationAction() -> () -> Void {
