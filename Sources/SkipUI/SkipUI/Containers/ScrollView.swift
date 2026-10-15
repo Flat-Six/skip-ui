@@ -63,6 +63,10 @@ public struct ScrollView : View, Renderable {
         var scrollModifier: Modifier = Modifier
         var effectiveScrollAxes: Axis.Set = []
         if wantsVerticalScroll {
+            // the screenshot tool's scroll to its foot, sized by the viewport (Flat-Six patch)
+            scrollModifier = scrollModifier.then(HarnessScrollRegistration(canScroll: { scrollState.maxValue > 0 }, toEnd: {
+                coroutineScope.launch { scrollState.scrollTo(scrollState.maxValue) }
+            }))
             scrollModifier = scrollModifier.verticalScroll(scrollState, enabled: !isScrollDisabled)
             effectiveScrollAxes.insert(Axis.Set.vertical)
             if !axes.contains(.horizontal) && !isScrollDisabled {

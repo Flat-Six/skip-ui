@@ -335,7 +335,16 @@ public final class List : View, Renderable {
         let flushTop = closeUnderTitle || (topSectionMargin > 0.dp && leadingSection?.content.size == 0)
         let listRowSpacing = EnvironmentValues.shared._listRowSpacing
         let listVerticalArrangement = listRowSpacing != nil ? Arrangement.spacedBy(listRowSpacing!.dp) : Arrangement.Top
-        LazyColumn(state: reorderableState.listState, modifier: modifier, contentPadding: contentPadding, verticalArrangement: listVerticalArrangement) {
+        // the screenshot tool's scroll to its foot (Flat-Six patch)
+        let harnessScroll = HarnessScrollRegistration(canScroll: { reorderableState.listState.canScrollForward || reorderableState.listState.canScrollBackward }, toEnd: {
+            coroutineScope.launch {
+                let count = reorderableState.listState.layoutInfo.totalItemsCount
+                if count > 0 {
+                    reorderableState.listState.scrollToItem(count - 1)
+                }
+            }
+        })
+        LazyColumn(state: reorderableState.listState, modifier: modifier.then(harnessScroll), contentPadding: contentPadding, verticalArrangement: listVerticalArrangement) {
             // Intentionally invalidate the LazyColumn after a section bottom has seen one frame at its unanimated baseline
             let _ = sectionBottomPlacementInvalidation.value
 
