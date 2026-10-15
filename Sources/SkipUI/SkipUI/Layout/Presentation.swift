@@ -40,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -89,6 +90,26 @@ private let ButtonsMainAxisSpacing: Dp = 8.dp
 private let ButtonsCrossAxisSpacing: Dp = 12.dp
 private let AlertDialogMinWidth: Dp = 280.dp
 private let AlertDialogMaxWidth: Dp = 560.dp
+
+/// Whether the content is in an elevated presentation, a sheet over the app (Flat-Six patch): iOS draws its system
+/// backgrounds a step lighter there in the dark — a sheet's ground #1C1C1E, its cells #2C2C2E. An app's colour scheme hook
+/// (`material3ColorScheme`) reads it to answer with its elevated colours, as Skip asks the hook again inside a sheet.
+public let LocalElevatedPresentation = compositionLocalOf { false }
+
+/// The content in the app's colour scheme for an elevated presentation, where the app has a hook to say what that is
+/// (Flat-Six patch).
+@Composable func ElevatedPresentationTheme(isElevated: Bool, content: @Composable () -> Void) {
+    guard isElevated, EnvironmentValues.shared._material3ColorScheme != nil else {
+        content()
+        return
+    }
+    CompositionLocalProvider(LocalElevatedPresentation.provides(true)) {
+        let scheme = ColorScheme.fromMaterialTheme().asMaterialTheme()
+        MaterialTheme(colorScheme: scheme) {
+            content()
+        }
+    }
+}
 
 // SKIP INSERT: @OptIn(ExperimentalMaterial3Api::class)
 @Composable func SheetPresentation(isPresented: Binding<Bool>, isFullScreen: Bool, context: ComposeContext, content: () -> any View, onDismiss: (() -> Void)?) {
@@ -209,6 +230,7 @@ private let AlertDialogMaxWidth: Dp = 560.dp
                 let stateSaver = remember { ComposeStateSaver() }
                 let presentationContext = context.content(stateSaver: stateSaver)
                 // Place inside of ModalBottomSheet, which renders content async
+                ElevatedPresentationTheme(isElevated: !isFullScreen) {
                 PresentationRoot(backgroundColor: presentationColor, context: presentationContext, absoluteSystemBarEdges: systemBarEdges) { context in
                     EnvironmentValues.shared.setValues {
                         if !isFullScreen {
@@ -223,6 +245,7 @@ private let AlertDialogMaxWidth: Dp = 560.dp
                             }
                         }
                     }
+                }
                 }
             }
             if !isEdgeToEdge {
