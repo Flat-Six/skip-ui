@@ -855,6 +855,19 @@ public struct NavigationStack : View, Renderable {
                 }
 
                 contentModifier = contentModifier.padding(top: topPadding, bottom: bottomPadding)
+                // The content's safe area ends where its box does at the bottom (Flat-Six patch): with no bottom bar the
+                // system's inset pads the box, and a safe area that did not say so left a child ignoring the safe area
+                // that much short of the screen's foot — a full-screen view 24 dp short, centred 12 dp low. The edge
+                // stays the system bar's, for the child to expand into. Not in a sheet: there a collapsed sheet's list
+                // drew its ground along the screen's foot, under its fade.
+                if !isPresentedAsSheet && bottomBarHeightPx.value <= Float(0.0) && arguments.ignoresSafeAreaEdges.contains(.bottom), let area = contentSafeArea {
+                    let boxBottomPx = area.presentationBoundsPx.bottom - with(density) { bottomPadding.toPx() }
+                    if area.safeBoundsPx.bottom > boxBottomPx {
+                        var (safeLeft, safeTop, safeRight, safeBottom) = area.safeBoundsPx
+                        safeBottom = boxBottomPx
+                        contentSafeArea = SafeArea(presentation: area.presentationBoundsPx, safe: Rect(top: safeTop, left: safeLeft, bottom: safeBottom, right: safeRight), absoluteSystemBars: area.absoluteSystemBarEdges)
+                    }
+                }
                 Box(modifier: contentModifier, contentAlignment: androidx.compose.ui.Alignment.Center) {
                     var topPadding = 0.dp
                     let searchableState: SearchableState? = arguments.isRoot ? (EnvironmentValues.shared._searchableState ?? searchableStatePreference.value.reduced) : nil
