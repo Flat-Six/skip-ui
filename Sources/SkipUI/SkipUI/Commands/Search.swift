@@ -5,15 +5,24 @@ import Foundation
 #if SKIP
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -121,7 +130,7 @@ public enum SearchToolbarBehavior: Hashable {
 }
 
 #if SKIP
-let searchFieldHeight = 56.0
+let searchFieldHeight = 36.0   // iOS's (Flat-Six patch; Material's outlined field was 56)
 
 /// Renders a search field.
 @Composable func SearchField(state: SearchableState, context: ComposeContext) {
@@ -129,7 +138,6 @@ let searchFieldHeight = 56.0
     let redaction = EnvironmentValues.shared.redactionReasons
     let styleInfo = Text.styleInfo(textEnvironment: textEnvironment, redaction: redaction, context: context)
     let animatable = styleInfo.style.asAnimatable(context: context)
-    let colors = TextField.colors(styleInfo: styleInfo, outline: Color.primary.opacity(0.5))
     let disabledTextColor = TextField.textColor(styleInfo: styleInfo, enabled: false)
     let prompt = state.prompt ?? Text(verbatim: stringResource(android.R.string.search_go))
     let focusManager = LocalFocusManager.current
@@ -164,9 +172,14 @@ let searchFieldHeight = 56.0
             state.isSearching.value = false
         }
     }
+    // iOS's search field (Flat-Six patch): 36 dp, rounded, on the tertiary system fill, the magnifier and the prompt
+    // inside it, a filled clear button once there is text — in place of Material's outlined capsule
+    let fieldFill = androidx.compose.ui.graphics.Color(red: Float(0.4627), green: Float(0.4627), blue: Float(0.502), alpha: Float(ColorScheme.fromMaterialTheme(colorScheme: MaterialTheme.colorScheme) == ColorScheme.dark ? 0.24 : 0.12))
+    let entryColor = TextField.textColor(styleInfo: styleInfo, enabled: true)
+    let entryStyle = entryColor == androidx.compose.ui.graphics.Color.Unspecified ? animatable.value : animatable.value.copy(color: entryColor)
+    let cursorColor = (EnvironmentValues.shared._tint ?? Color.primary).colorImpl()
     Row(horizontalArrangement: Arrangement.spacedBy(8.dp), verticalAlignment: androidx.compose.ui.Alignment.CenterVertically, modifier: context.modifier) {
-        let isFocused = remember { mutableStateOf(false) }
-        OutlinedTextField(value: currentTextFieldValue, onValueChange: {
+        BasicTextField(value: currentTextFieldValue, onValueChange: {
             textFieldValue.value = $0
             state.text.wrappedValue = $0.text
         }, modifier: Modifier.weight(Float(1.0)).semantics { testTagsAsResourceId = true }.testTag("skip_ui_automation_search_field").focusRequester(focusRequester).onFocusChanged {
@@ -174,18 +187,23 @@ let searchFieldHeight = 56.0
                 state.isSearching.value = true
                 state.isPresented?.wrappedValue = true
             }
-        }, placeholder: {
-            TextField.Placeholder(prompt: prompt, context: contentContext)
-        }, leadingIcon: {
-            Icon(imageVector: Icons.Outlined.Search, tint: disabledTextColor, contentDescription: nil)
-        }, trailingIcon: {
-            if state.text.wrappedValue.isEmpty == false {
-                Icon(imageVector: Icons.Outlined.Clear, tint: disabledTextColor, contentDescription: "Clear", modifier: Modifier.clickable {
-                    state.text.wrappedValue = ""
-                    focusRequester.requestFocus()
-                })
+        }, textStyle: entryStyle, keyboardOptions: keyboardOptions, keyboardActions: keyboardActions, singleLine: true, cursorBrush: SolidColor(cursorColor), decorationBox: { innerTextField in
+            Row(modifier: Modifier.height(searchFieldHeight.dp).background(fieldFill, RoundedCornerShape(10.dp)).padding(horizontal: 7.dp), horizontalArrangement: Arrangement.spacedBy(5.dp), verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
+                Icon(imageVector: Icons.Outlined.Search, tint: disabledTextColor, contentDescription: nil, modifier: Modifier.size(20.dp))
+                Box(modifier: Modifier.weight(Float(1.0)), contentAlignment: androidx.compose.ui.Alignment.CenterStart) {
+                    if currentTextFieldValue.text.isEmpty {
+                        TextField.Placeholder(prompt: prompt, context: contentContext)
+                    }
+                    innerTextField()
+                }
+                if state.text.wrappedValue.isEmpty == false {
+                    Icon(imageVector: Icons.Filled.Cancel, tint: disabledTextColor, contentDescription: "Clear", modifier: Modifier.size(18.dp).clickable {
+                        state.text.wrappedValue = ""
+                        focusRequester.requestFocus()
+                    })
+                }
             }
-        }, textStyle: animatable.value, keyboardOptions: keyboardOptions, keyboardActions: keyboardActions, singleLine: true, colors: colors, shape: Capsule().asComposeShape(density: LocalDensity.current))
+        })
         AnimatedVisibility(visible: state.isSearching.value == true) {
             Button.RenderTextButton(label: Text(verbatim: stringResource(android.R.string.cancel)), context: contentContext) {
                 state.text.wrappedValue = ""
