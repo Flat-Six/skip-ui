@@ -13,6 +13,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.LocalContentColor
@@ -85,6 +87,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
@@ -446,9 +450,18 @@ public struct TabView : View, Renderable {
                                         // measuring), colours, icon and title apply as they did.
                                         let isDark = ColorScheme.fromMaterialTheme(colorScheme: MaterialTheme.colorScheme) == ColorScheme.dark
                                         let hairline = isDark ? androidx.compose.ui.graphics.Color(red: Float(0.33), green: Float(0.33), blue: Float(0.35), alpha: Float(0.6)) : androidx.compose.ui.graphics.Color(red: Float(0.24), green: Float(0.24), blue: Float(0.26), alpha: Float(0.29))
+                                        // In a wide bar — a regular width (an iPad's, a phone's on its side) or a compact height —
+                                        // each tab its icon beside its title, as UIKit's: in slots of 0.217 of the bar's width,
+                                        // centred on the bar (the iPhone 11 turned and both iPads: 195 pt apart across 896, 178
+                                        // across 820, 243 across 1133, 254 across 1180), the title at 13, regular (Flat-Six patch)
+                                        let inline = EnvironmentValues.shared.horizontalSizeClass == UserInterfaceSizeClass.regular || EnvironmentValues.shared.verticalSizeClass == UserInterfaceSizeClass.compact
+                                        let visibleCount = max(1, tabs.filter { $0 != nil && $0?.isHidden != true }.size)
                                         Column(modifier: options.modifier.semantics { testTagsAsResourceId = true }.testTag("skip_ui_automation_tab_bar").fillMaxWidth().background(options.containerColor)) {
                                             Box(modifier: Modifier.fillMaxWidth().height(0.33.dp).background(hairline))
-                                            Row(modifier: Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets.only(WindowInsetsSides.Bottom)).absolutePadding(left: sideLeft, right: sideRight).height(49.dp), verticalAlignment: androidx.compose.ui.Alignment.Top) {
+                                            BoxWithConstraints(modifier: Modifier.fillMaxWidth()) {
+                                            let slot = maxWidth * Float(0.868) / Float(visibleCount)
+                                            let rowModifier = inline ? Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets.only(WindowInsetsSides.Bottom)).height(49.dp) : Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets.only(WindowInsetsSides.Bottom)).absolutePadding(left: sideLeft, right: sideRight).height(49.dp)
+                                            Row(modifier: rowModifier, horizontalArrangement: inline ? Arrangement.Center : Arrangement.Start, verticalAlignment: inline ? androidx.compose.ui.Alignment.CenterVertically : androidx.compose.ui.Alignment.Top) {
                                                 for tabIndex in 0..<tabRenderables.size {
                                                     // A tab from a `false` conditional branch maps to a nil entry above: no slot
                                                     if tabs[tabIndex] == nil || tabs[tabIndex]?.isHidden == true {
@@ -460,6 +473,23 @@ public struct TabView : View, Renderable {
                                                     let itemColors = options.itemColors
                                                     let iconColor = !enabled ? itemColors.disabledIconColor : selected ? itemColors.selectedIconColor : itemColors.unselectedIconColor
                                                     let textColor = !enabled ? itemColors.disabledTextColor : selected ? itemColors.selectedTextColor : itemColors.unselectedTextColor
+                                                    if inline {
+                                                        Row(modifier: options.itemModifier(tabIndex).width(slot).fillMaxHeight().clickable(interactionSource: options.itemInteractionSource, indication: nil, enabled: enabled, onClick: { options.onItemClick(tabIndex) }), horizontalArrangement: Arrangement.Center, verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
+                                                            // SKIP INSERT: val providedIconColor = LocalContentColor provides iconColor
+                                                            CompositionLocalProvider(providedIconColor) {
+                                                                options.itemIcon(tabIndex)
+                                                            }
+                                                            if let itemLabel = options.itemLabel {
+                                                                Spacer(modifier: Modifier.width(8.dp))
+                                                                // SKIP INSERT: val providedTextColor = LocalContentColor provides textColor
+                                                                CompositionLocalProvider(providedTextColor) {
+                                                                    ProvideTextStyle(MaterialTheme.typography.labelMedium.copy(fontSize: 13.sp, lineHeight: 16.sp, fontWeight: FontWeight.Normal)) {
+                                                                        itemLabel(tabIndex)
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    } else {
                                                     Column(modifier: options.itemModifier(tabIndex).weight(Float(1.0)).fillMaxHeight().clickable(interactionSource: options.itemInteractionSource, indication: nil, enabled: enabled, onClick: { options.onItemClick(tabIndex) }).padding(top: 4.dp), horizontalAlignment: androidx.compose.ui.Alignment.CenterHorizontally) {
                                                         // SKIP INSERT: val providedIconColor = LocalContentColor provides iconColor
                                                         CompositionLocalProvider(providedIconColor) {
@@ -474,7 +504,9 @@ public struct TabView : View, Renderable {
                                                             }
                                                         }
                                                     }
+                                                    }
                                                 }
+                                            }
                                             }
                                         }
                                     } else {
