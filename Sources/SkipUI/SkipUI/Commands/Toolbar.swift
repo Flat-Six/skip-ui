@@ -627,12 +627,15 @@ struct ToolbarItems {
     let content: [View]
 
     /// Proces our content items, dividing them into the locations at which they should render.
-    @Composable func Evaluate(context: ComposeContext) -> (titleMenu: ToolbarTitleMenu?, topLeading: kotlin.collections.List<Renderable>, topTrailing: kotlin.collections.List<Renderable>, bottom: kotlin.collections.List<Renderable>) {
+    @Composable func Evaluate(context: ComposeContext) -> (titleMenu: ToolbarTitleMenu?, topLeading: kotlin.collections.List<Renderable>, topTrailing: kotlin.collections.List<Renderable>, bottom: kotlin.collections.List<Renderable>, keyboard: kotlin.collections.List<Renderable>) {
         var titleMenu: ToolbarTitleMenu? = nil
         let leading: kotlin.collections.MutableList<Renderable> = mutableListOf()
         let trailing: kotlin.collections.MutableList<Renderable> = mutableListOf()
         var principal: Renderable? = nil
         let bottom: kotlin.collections.MutableList<Renderable> = mutableListOf()
+        // The keyboard's items, for a bar on top of the keyboard while it is up (Flat-Six patch: they fell into the
+        // top bar's actions and ran over its title)
+        let keyboard: kotlin.collections.MutableList<Renderable> = mutableListOf()
         for view in content {
             let renderables = view.Evaluate(context: context, options: 0)
             for renderable in renderables {
@@ -647,6 +650,8 @@ struct ToolbarItems {
                         leading.add(renderable)
                     case .bottomBar:
                         bottom.add(renderable)
+                    case .keyboard:
+                        keyboard.add(renderable)
                     default:
                         trailing.add(renderable)
                     }
@@ -663,7 +668,7 @@ struct ToolbarItems {
         }) {
             bottom.add(1, Spacer())
         }
-        return (titleMenu, leading, trailing, bottom)
+        return (titleMenu, leading, trailing, bottom, keyboard)
     }
 }
 #endif

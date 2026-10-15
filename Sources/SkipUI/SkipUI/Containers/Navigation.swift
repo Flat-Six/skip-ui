@@ -241,6 +241,35 @@ public struct NavigationStack : View, Renderable {
         }
     }
 
+    /// The keyboard's toolbar items in iOS's bar on top of the keyboard: 44 dp, the items in the tint, spaced between
+    /// neighbours only as the bottom bar's are (Flat-Six patch).
+    @Composable private func RenderKeyboardBar(items: kotlin.collections.List<Renderable>, context: ComposeContext) {
+        let tint = EnvironmentValues.shared._tint ?? Color(colorImpl: { MaterialTheme.colorScheme.onSurface })
+        let placement = EnvironmentValues.shared._placement
+        EnvironmentValues.shared.setValues {
+            $0.set_tint(tint)
+            $0.set_placement(placement.union(ViewPlacement.toolbar))
+            return ComposeResult.ok
+        } in: {
+            Box(modifier: Modifier.fillMaxWidth().height(44.dp).background(Color.systemBarBackground.colorImpl()).padding(start: 16.dp, end: 16.dp), contentAlignment: androidx.compose.ui.Alignment.CenterStart) {
+                HStack(spacing: 0.0) {
+                    ComposeView { context in
+                        var lastWasSpacer: Bool? = nil
+                        for renderable in items {
+                            let stripped = renderable.strip()
+                            let isSpacer = stripped is Spacer || stripped is ToolbarSpacer
+                            if let lastWasSpacer, !lastWasSpacer && !isSpacer {
+                                androidx.compose.foundation.layout.Spacer(modifier: Modifier.width(24.dp))
+                            }
+                            renderable.Render(context: context)
+                            lastWasSpacer = isSpacer
+                        }
+                    }
+                }.Compose(context)
+            }
+        }
+    }
+
     // SKIP INSERT: @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
     @Composable private func RenderEntry(navigator: MutableState<Navigator>, toolbarContent: MutableState<Preference<ToolbarContentPreferences>>, arguments: NavigationEntryArguments, context: ComposeContext, content: @Composable (ComposeContext) -> Void) {
         let state = arguments.state
@@ -276,7 +305,7 @@ public struct NavigationStack : View, Renderable {
         // content for each bar) prevents it from updating properly on recompose
         let toolbarContentReduced = toolbarContent.value.reduced
         let toolbarItems = ToolbarItems(content: toolbarContentReduced.content ?? [])
-        let (titleMenu, topLeadingItems, topTrailingItems, bottomItems) = toolbarItems.Evaluate(context: context)
+        let (titleMenu, topLeadingItems, topTrailingItems, bottomItems, keyboardItems) = toolbarItems.Evaluate(context: context)
 
         let showTopBar: Bool
         switch topBarPreferences?.visibility ?? Visibility.automatic {
@@ -707,6 +736,14 @@ public struct NavigationStack : View, Renderable {
                 // Bottom bar aligned to bottom
                 Box(modifier: Modifier.zIndex(Float(1.1)).align(androidx.compose.ui.Alignment.BottomCenter)) {
                     bottomBar()
+                }
+
+                // The keyboard's items on top of the keyboard while it is up, as iOS shows them (the root pads the
+                // content above the keyboard, so the bottom here is the keyboard's top) — Flat-Six patch
+                if keyboardItems.size > 0 && WindowInsets.ime.getBottom(density) > 0 {
+                    Box(modifier: Modifier.zIndex(Float(1.2)).align(androidx.compose.ui.Alignment.BottomCenter)) {
+                        RenderKeyboardBar(items: keyboardItems, context: context)
+                    }
                 }
 
                 // Constrain the content to the area between the top bar and bottom bar. In the Box layout we use
