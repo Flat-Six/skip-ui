@@ -4,6 +4,12 @@
 import Foundation
 #if SKIP
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -160,42 +166,49 @@ public final class Picker<SelectionValue> : View, Renderable {
         }
     }
 
+    /// iOS's segmented control (Flat-Six patch), for Material's outlined segmented buttons: a 32 dp track on the
+    /// tertiary system fill, the selected segment raised on white (a grey in the dark), hairlines between the others,
+    /// 13 pt titles, the selected one semibold.
     @Composable private func RenderSegmentedValue(context: ComposeContext) {
         let _ = selectionTrigger?.value
         let (_, tagged) = processPickerContent(content: content, selection: selection, context: context, requireTaggedRenderables: true)
         let selectedIndex = tagged?.indexOfFirst { TagModifier.on(content: $0, role: .tag)?.value == selection.wrappedValue } ?? -1
         let isEnabled = EnvironmentValues.shared.isEnabled
-        let colors: SegmentedButtonColors
-        let disabledBorderColor = Color.primary.colorImpl().copy(alpha: ContentAlpha.disabled)
-        if let tint = EnvironmentValues.shared._tint {
-            colors = SegmentedButtonDefaults.colors(activeContainerColor: tint.colorImpl().copy(alpha: Float(0.15)), disabledActiveBorderColor: disabledBorderColor, disabledInactiveBorderColor: disabledBorderColor)
-        } else {
-            colors = SegmentedButtonDefaults.colors(disabledActiveBorderColor: disabledBorderColor, disabledInactiveBorderColor: disabledBorderColor)
-        }
-
+        let isDark = ColorScheme.fromMaterialTheme(colorScheme: MaterialTheme.colorScheme) == ColorScheme.dark
+        let track = androidx.compose.ui.graphics.Color(red: Float(0.4627), green: Float(0.4627), blue: Float(0.502), alpha: Float(isDark ? 0.24 : 0.12))
+        let thumb = isDark ? androidx.compose.ui.graphics.Color(red: Float(0.388), green: Float(0.388), blue: Float(0.4), alpha: Float(1.0)) : androidx.compose.ui.graphics.Color.White
+        let hairline = androidx.compose.ui.graphics.Color(red: Float(0.557), green: Float(0.557), blue: Float(0.576), alpha: Float(0.3))
         let contentContext = context.content()
-        let updateOptions = EnvironmentValues.shared._material3SegmentedButton
-        SingleChoiceSegmentedButtonRow(modifier: Modifier.fillWidth().then(context.modifier)) {
+        Row(modifier: Modifier.fillWidth().then(context.modifier).height(32.dp).alpha(isEnabled ? Float(1.0) : Float(0.4)).background(track, RoundedCornerShape(9.dp)).padding(2.dp), verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
             if let tagged {
                 for (index, taggedRenderable) in tagged.withIndex() {
                     let isSelected = index == selectedIndex
-                    let onClick: () -> Void = {
+                    if index > 0 {
+                        let showsHairline = index != selectedIndex && index - 1 != selectedIndex
+                        Box(modifier: Modifier.width(1.dp).height(16.dp).background(showsHairline ? hairline : androidx.compose.ui.graphics.Color.Transparent))
+                    }
+                    var segment = Modifier.weight(Float(1.0)).fillMaxHeight()
+                    if isSelected {
+                        segment = segment.shadow(elevation: 1.dp, shape: RoundedCornerShape(7.dp)).background(thumb, RoundedCornerShape(7.dp))
+                    }
+                    segment = segment.clickable(interactionSource: nil, indication: nil, enabled: isEnabled, onClick: {
                         selection.wrappedValue = TagModifier.on(content: taggedRenderable, role: .tag)?.value as! SelectionValue
                         noteSelectionChanged()
-                    }
-                    let shape = SegmentedButtonDefaults.itemShape(index: index, count: tagged.size)
-                    let borderColor = isSelected ? (isEnabled ? colors.activeBorderColor : colors.disabledActiveBorderColor) : (isEnabled ? colors.inactiveBorderColor : colors.disabledInactiveBorderColor)
-                    let border = SegmentedButtonDefaults.borderStroke(borderColor)
-                    let icon: @Composable () -> Void = { SegmentedButtonDefaults.Icon(isSelected) }
-                    var options = Material3SegmentedButtonOptions(index: index, count: tagged.size, selected: isSelected, onClick: onClick, modifier: Modifier, enabled: isEnabled, shape: shape, colors: colors, border: border, icon: icon)
-                    if let updateOptions {
-                        options = updateOptions(options)
-                    }
-                    SegmentedButton(selected: options.selected, onClick: options.onClick, modifier: options.modifier, enabled: options.enabled, shape: options.shape, colors: options.colors, border: options.border, icon: options.icon) {
-                        if let label = taggedRenderable.strip() as? Label {
-                            label.RenderTitle(context: contentContext)
-                        } else {
-                            taggedRenderable.Render(context: contentContext)
+                    })
+                    Box(modifier: segment, contentAlignment: androidx.compose.ui.Alignment.Center) {
+                        EnvironmentValues.shared.setValues {
+                            $0.setfont(Font.footnote)
+                            var textEnvironment = $0._textEnvironment
+                            textEnvironment.fontWeight = isSelected ? Font.Weight.semibold : nil
+                            $0.set_textEnvironment(textEnvironment)
+                            $0.set_foregroundStyle(Color.primary)
+                            return ComposeResult.ok
+                        } in: {
+                            if let label = taggedRenderable.strip() as? Label {
+                                label.RenderTitle(context: contentContext)
+                            } else {
+                                taggedRenderable.Render(context: contentContext)
+                            }
                         }
                     }
                 }
