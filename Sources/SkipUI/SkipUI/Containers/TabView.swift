@@ -509,6 +509,16 @@ public struct TabView : View, Renderable {
                                     let contentModifier = Modifier.fillMaxSize().padding(top: topPadding, bottom: bottomPadding)
                                     let tabViewSafeArea = tabViewSafeAreaState.value
                                     var contentSafeArea = tabViewSafeArea?.insetting(Edge.bottom, to: bottomBarTopPx.value)
+                                    // The content starts below the system bar, padded down even when a container above
+                                    // already ignored the safe area (and the tab view had nothing to extend into): its safe
+                                    // area must start there too, as it does when the tab view extends itself, or a
+                                    // navigation stack in it takes the system bar again for its top bar (Flat-Six patch)
+                                    if let area = contentSafeArea {
+                                        let paddedTopPx = area.presentationBoundsPx.top + with(density) { topPadding.toPx() }
+                                        if area.safeBoundsPx.top < paddedTopPx {
+                                            contentSafeArea = SafeArea(presentation: area.presentationBoundsPx, safe: Rect(top: paddedTopPx, left: area.safeBoundsPx.left, bottom: area.safeBoundsPx.bottom, right: area.safeBoundsPx.right), absoluteSystemBars: area.absoluteSystemBarEdges)
+                                        }
+                                    }
                                     if tabNavLeadingEndPx.value > Float(0.0) {
                                         contentSafeArea = contentSafeArea?.insetting(Edge.leading, to: tabNavLeadingEndPx.value)
                                     }
