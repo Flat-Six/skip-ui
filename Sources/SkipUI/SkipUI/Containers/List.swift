@@ -617,8 +617,14 @@ public final class List : View, Renderable {
     /// Minimum width for a single reveal button; grows to fit longer labels.
     private static let swipeButtonMinWidth: Dp = 80.dp
 
+    /// A row's padding above and below its content and the content's least height: iOS's 11 and 22, a one-line row
+    /// 44 dp as iOS's are and taller rows padded as iOS pads them (Flat-Six patch; Skip's 8 and 32 made every row
+    /// at least 48 and a two-line row 6 short)
+    private static let verticalRowInset = 11.0
+    private static let minimumRowContentHeight = 22.0
+
     static func contentModifier(level: Int) -> Modifier {
-        return Modifier.padding(start: (horizontalItemInset + level * levelInset).dp, end: horizontalItemInset.dp, top: verticalItemInset.dp, bottom: verticalItemInset.dp).fillMaxWidth().requiredHeightIn(min: minimumItemHeight.dp)
+        return Modifier.padding(start: (horizontalItemInset + level * levelInset).dp, end: horizontalItemInset.dp, top: verticalRowInset.dp, bottom: verticalRowInset.dp).fillMaxWidth().requiredHeightIn(min: minimumRowContentHeight.dp)
     }
 
     @Composable static func RenderSeparator(level: Int) {
