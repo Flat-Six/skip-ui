@@ -227,8 +227,11 @@ public struct Color: ShapeStyle, Renderable, Hashable {
     })
 
     /// Use for separators, etc.
+    /// The colour scheme's outline (Flat-Six patch), which an app can set — the iOS scheme sets it to the separator's.
+    /// Skip took the surface at an elevation, which is the surface itself where the surface's tint is: every divider of
+    /// a list, and every `Divider()`, drawn in its cell's own colour.
     static var separator: Color = Color(colorImpl: {
-        MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+        MaterialTheme.colorScheme.outline
     })
 
     /// Use for placeholder content.
