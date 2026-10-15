@@ -13,6 +13,11 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.ProvideTextStyle
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -428,31 +433,41 @@ public struct TabView : View, Renderable {
                                         disabledTextColor: options.itemColors.disabledTextColor
                                     )
                                     if layoutType == NavigationSuiteType.NavigationBar {
-                                        NavigationBar(modifier: options.modifier.semantics { testTagsAsResourceId = true }.testTag("skip_ui_automation_tab_bar"), containerColor: options.containerColor, contentColor: options.contentColor, tonalElevation: options.tonalElevation) {
-                                            for tabIndex in 0..<tabRenderables.size {
-                                                // A tab from a `false` conditional branch (e.g. `if x { Tab(...) }`)
-                                                // maps to a nil entry above; skip it so it does not render a blank,
-                                                // equal-width navigation item (phantom slot / uneven spacing).
-                                                if tabs[tabIndex] == nil || tabs[tabIndex]?.isHidden == true {
-                                                    continue
+                                        // iOS's tab bar (Flat-Six patch): 49 dp over the system's bottom inset, a hairline
+                                        // on top, each tab its icon over its title in its item's colour, with no indicator
+                                        // and no ripple — Material's bar was 80 dp. The options' modifier (the bar's
+                                        // measuring), colours, icon and title apply as they did.
+                                        let isDark = ColorScheme.fromMaterialTheme(colorScheme: MaterialTheme.colorScheme) == ColorScheme.dark
+                                        let hairline = isDark ? androidx.compose.ui.graphics.Color(red: Float(0.33), green: Float(0.33), blue: Float(0.35), alpha: Float(0.6)) : androidx.compose.ui.graphics.Color(red: Float(0.24), green: Float(0.24), blue: Float(0.26), alpha: Float(0.29))
+                                        Column(modifier: options.modifier.semantics { testTagsAsResourceId = true }.testTag("skip_ui_automation_tab_bar").fillMaxWidth().background(options.containerColor)) {
+                                            Box(modifier: Modifier.fillMaxWidth().height(0.33.dp).background(hairline))
+                                            Row(modifier: Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets).height(49.dp), verticalAlignment: androidx.compose.ui.Alignment.Top) {
+                                                for tabIndex in 0..<tabRenderables.size {
+                                                    // A tab from a `false` conditional branch maps to a nil entry above: no slot
+                                                    if tabs[tabIndex] == nil || tabs[tabIndex]?.isHidden == true {
+                                                        continue
+                                                    }
+                                                    let route = String(describing: tabIndex)
+                                                    let selected = route == currentRoute
+                                                    let enabled = options.itemEnabled(tabIndex) && tabs[tabIndex]?.isDisabled != true
+                                                    let itemColors = options.itemColors
+                                                    let iconColor = !enabled ? itemColors.disabledIconColor : selected ? itemColors.selectedIconColor : itemColors.unselectedIconColor
+                                                    let textColor = !enabled ? itemColors.disabledTextColor : selected ? itemColors.selectedTextColor : itemColors.unselectedTextColor
+                                                    Column(modifier: options.itemModifier(tabIndex).weight(Float(1.0)).fillMaxHeight().clickable(interactionSource: options.itemInteractionSource, indication: nil, enabled: enabled, onClick: { options.onItemClick(tabIndex) }).padding(top: 4.dp), horizontalAlignment: androidx.compose.ui.Alignment.CenterHorizontally) {
+                                                        // SKIP INSERT: val providedIconColor = LocalContentColor provides iconColor
+                                                        CompositionLocalProvider(providedIconColor) {
+                                                            options.itemIcon(tabIndex)
+                                                        }
+                                                        if let itemLabel = options.itemLabel {
+                                                            // SKIP INSERT: val providedTextColor = LocalContentColor provides textColor
+                                                            CompositionLocalProvider(providedTextColor) {
+                                                                ProvideTextStyle(MaterialTheme.typography.labelMedium) {
+                                                                    itemLabel(tabIndex)
+                                                                }
+                                                            }
+                                                        }
+                                                    }
                                                 }
-                                                let route = String(describing: tabIndex)
-                                                let label: (@Composable () -> Void)?
-                                                if let itemLabel = options.itemLabel {
-                                                    label = { itemLabel(tabIndex) }
-                                                } else {
-                                                    label = nil
-                                                }
-                                                NavigationBarItem(selected: route == currentRoute,
-                                                    onClick: { options.onItemClick(tabIndex) },
-                                                    icon: { options.itemIcon(tabIndex) },
-                                                    modifier: options.itemModifier(tabIndex),
-                                                    enabled: options.itemEnabled(tabIndex) && tabs[tabIndex]?.isDisabled != true,
-                                                    label: label,
-                                                    alwaysShowLabel: options.alwaysShowItemLabels,
-                                                    colors: options.itemColors,
-                                                    interactionSource: options.itemInteractionSource
-                                                )
                                             }
                                         }
                                     } else {
