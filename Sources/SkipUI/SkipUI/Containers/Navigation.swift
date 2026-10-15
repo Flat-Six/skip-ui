@@ -358,8 +358,9 @@ public struct NavigationStack : View, Renderable {
         modifier = modifier.then(context.modifier)
 
         let shouldReserveInitialTopBarSpace = showTopBar || reservesInitialRootTopBar
-        let estimatedCollapsedTopBarHeight = 64.dp
-        let estimatedExpandedTopBarHeight = 112.dp
+        // iOS's bars (Flat-Six patch): 44 inline, and a large title's 44 + 52 — Material's were 64 and 112
+        let estimatedCollapsedTopBarHeight = 44.dp
+        let estimatedExpandedTopBarHeight = 96.dp
         let estimatedTopBarHeight = isInlineTitleDisplayMode ? estimatedCollapsedTopBarHeight : estimatedExpandedTopBarHeight
         let safeAreaTopPx = arguments.safeArea?.safeBoundsPx.top ?? Float(0.0)
         let hasAbsoluteTopSystemBar = arguments.safeArea?.absoluteSystemBarEdges.contains(.top) == true
@@ -552,10 +553,12 @@ public struct NavigationStack : View, Renderable {
                             let appBarTitleStyle = typography.headlineLarge.copy(fontWeight: FontWeight.Bold)
                             let appBarTypography = typography.copy(headlineSmall: appBarTitleStyle)
                             MaterialTheme(colorScheme: MaterialTheme.colorScheme, typography: appBarTypography, shapes: MaterialTheme.shapes) {
+                                // A large title's bar at iOS's 44 + 52 (Flat-Six patch; Material's 64 + 48): the
+                                // title row's bottom padding gives way where it is short, so the title is not cut
                                 if options.preferLargeStyle {
-                                    LargeTopAppBar(title: options.title, modifier: options.modifier, navigationIcon: options.navigationIcon, actions: { topBarActions() }, colors: options.colors, scrollBehavior: options.scrollBehavior, windowInsets: topBarWindowInsets)
+                                    LargeTopAppBar(title: options.title, modifier: options.modifier, navigationIcon: options.navigationIcon, actions: { topBarActions() }, collapsedHeight: estimatedCollapsedTopBarHeight, expandedHeight: estimatedExpandedTopBarHeight, windowInsets: topBarWindowInsets, colors: options.colors, scrollBehavior: options.scrollBehavior)
                                 } else {
-                                    MediumTopAppBar(title: options.title, modifier: options.modifier, navigationIcon: options.navigationIcon, actions: { topBarActions() }, colors: options.colors, scrollBehavior: options.scrollBehavior, windowInsets: topBarWindowInsets)
+                                    MediumTopAppBar(title: options.title, modifier: options.modifier, navigationIcon: options.navigationIcon, actions: { topBarActions() }, collapsedHeight: estimatedCollapsedTopBarHeight, expandedHeight: estimatedExpandedTopBarHeight, windowInsets: topBarWindowInsets, colors: options.colors, scrollBehavior: options.scrollBehavior)
                                 }
                             }
                         }
