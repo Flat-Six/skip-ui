@@ -289,8 +289,10 @@ public final class List : View, Renderable {
 
         // Combine contentPadding with contentMargins additively
         var contentPadding = EnvironmentValues.shared._contentPadding.asPaddingValues()
+        var hasTopContentMargin = false
         if let contentMargins = EnvironmentValues.shared._contentMargins?.asComposePaddingValues(for: .automatic) {
             contentPadding = contentPadding.adding(contentMargins)
+            hasTopContentMargin = contentMargins.calculateTopPadding() > 0.dp
         }
         let listRowSpacing = EnvironmentValues.shared._listRowSpacing
         let listVerticalArrangement = listRowSpacing != nil ? Arrangement.spacedBy(listRowSpacing!.dp) : Arrangement.Top
@@ -537,7 +539,7 @@ public final class List : View, Renderable {
             if hasHeader {
                 let hasTopSection = renderables.firstOrNull() is LazySectionHeader
                 item {
-                    RenderHeader(styling: styling, safeAreaHeight: isSearchable ? 0.dp : arguments.headerSafeAreaHeight, hasTopSection: hasTopSection)
+                    RenderHeader(styling: styling, safeAreaHeight: isSearchable ? 0.dp : arguments.headerSafeAreaHeight, hasTopSection: hasTopSection, hasTopMargin: hasTopContentMargin)
                 }
             }
             for renderable in renderables {
@@ -1315,9 +1317,11 @@ public final class List : View, Renderable {
 
     /// - Warning: Only call for non-.plain styles or with a positive safe area height. This is distinct from having this function detect
     /// .plain and zero-height and return without rendering. That causes .plain style lists to have a weird rubber banding effect on overscroll.
-    @Composable private func RenderHeader(styling: ListStyling, safeAreaHeight: Dp, hasTopSection: Bool) {
+    @Composable private func RenderHeader(styling: ListStyling, safeAreaHeight: Dp, hasTopSection: Bool, hasTopMargin: Bool = false) {
         var height = safeAreaHeight
-        if styling.style != .plain {
+        // A top content margin takes the place of a grouped list's own top inset, as in SwiftUI, rather than adding to
+        // it (Flat-Six patch)
+        if styling.style != .plain && !hasTopMargin {
             height += Self.verticalInset.dp
         }
         let backgroundColor = BackgroundColor(styling: styling, isItem: false)
