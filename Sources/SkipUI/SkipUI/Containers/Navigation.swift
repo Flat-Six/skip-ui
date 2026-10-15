@@ -505,12 +505,17 @@ public struct NavigationStack : View, Renderable {
                                             ) { backIcon() }
                                         case Material3TopAppBarNavigationIconButtonStyle.iconButton:
                                             // iOS's back button (Flat-Six patch): the chevron and the page before's title
-                                            // — "Back" where it has none or it runs long — in the tint, not Material's arrow
+                                            // in the tint, not Material's arrow. As iOS: the title where it fits beside this
+                                            // page's centred one, else "Back", else the chevron alone (a 17 pt character is
+                                            // about half the width of a centred one's share of the bar)
                                             let previousTitle = navigator.value.previousState(before: state)?.title?.localizedTextString() ?? ""
-                                            let backTitle = !previousTitle.isEmpty && previousTitle.count <= 12 ? previousTitle : "Back"
+                                            let ownTitleRoom = Double(hasTitle ? title.localizedTextString().count : 0) * 0.53
+                                            let backTitle = !previousTitle.isEmpty && Double(previousTitle.count) + ownTitleRoom <= 21.0 ? previousTitle : (4.0 + ownTitleRoom <= 21.0 ? "Back" : "")
                                             Row(modifier: Modifier.clickable(interactionSource: nil, indication: nil, onClick: { navigator.value.navigateBack() }).height(44.dp).padding(start: 2.dp, end: 8.dp), verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
                                                 Icon(imageVector: Icons.AutoMirrored.Filled.ArrowBackIos, contentDescription: "Back", tint: tint.colorImpl(), modifier: Modifier.size(22.dp))
-                                                androidx.compose.material3.Text(text: backTitle, color: tint.colorImpl(), style: MaterialTheme.typography.bodyLarge, maxLines: 1)
+                                                if !backTitle.isEmpty {
+                                                    androidx.compose.material3.Text(text: backTitle, color: tint.colorImpl(), style: MaterialTheme.typography.bodyLarge, maxLines: 1)
+                                                }
                                             }
                                         }
                                     }
