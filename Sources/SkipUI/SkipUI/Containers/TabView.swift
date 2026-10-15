@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.absolutePadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -297,9 +300,13 @@ public struct TabView : View, Renderable {
         // When we layout, extend into the safe area if it is due to system bars, not into any app chrome. We extend
         // into the top bar too so that tab content can also extend into the top area without getting cut off during
         // tab switches
-        var ignoresSafeAreaEdges: Edge.Set = [.bottom, .top]
+        // The sides too, where a system bar or a cutout is (Flat-Six patch): the bar's ground to the screen's edge, as
+        // iOS's under a phone's notch, its tabs and the tabs' content in from it by as much
+        var ignoresSafeAreaEdges: Edge.Set = [.bottom, .top, .leading, .trailing]
         ignoresSafeAreaEdges.formIntersection(safeArea?.absoluteSystemBarEdges ?? [])
-        IgnoresSafeAreaLayout(expandInto: ignoresSafeAreaEdges, checkEdges: ignoresSafeAreaEdges, logTag: "TabView") { _, _ in
+        IgnoresSafeAreaLayout(expandInto: ignoresSafeAreaEdges, checkEdges: ignoresSafeAreaEdges, logTag: "TabView") { expansion, _ in
+            let sideLeft = with(density) { expansion.left.toDp() }
+            let sideRight = with(density) { expansion.right.toDp() }
             ComposeContainer(modifier: context.modifier, fillWidth: true, fillHeight: true) { modifier in
                 // Don't use a Scaffold: it clips content beyond its bounds and prevents .ignoresSafeArea modifiers from working
                 Box(modifier: modifier.background(Color.background.colorImpl()).fillMaxSize()) {
@@ -441,7 +448,7 @@ public struct TabView : View, Renderable {
                                         let hairline = isDark ? androidx.compose.ui.graphics.Color(red: Float(0.33), green: Float(0.33), blue: Float(0.35), alpha: Float(0.6)) : androidx.compose.ui.graphics.Color(red: Float(0.24), green: Float(0.24), blue: Float(0.26), alpha: Float(0.29))
                                         Column(modifier: options.modifier.semantics { testTagsAsResourceId = true }.testTag("skip_ui_automation_tab_bar").fillMaxWidth().background(options.containerColor)) {
                                             Box(modifier: Modifier.fillMaxWidth().height(0.33.dp).background(hairline))
-                                            Row(modifier: Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets).height(49.dp), verticalAlignment: androidx.compose.ui.Alignment.Top) {
+                                            Row(modifier: Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets.only(WindowInsetsSides.Bottom)).absolutePadding(left: sideLeft, right: sideRight).height(49.dp), verticalAlignment: androidx.compose.ui.Alignment.Top) {
                                                 for tabIndex in 0..<tabRenderables.size {
                                                     // A tab from a `false` conditional branch maps to a nil entry above: no slot
                                                     if tabs[tabIndex] == nil || tabs[tabIndex]?.isHidden == true {
@@ -521,7 +528,7 @@ public struct TabView : View, Renderable {
                                     if bottomBarTopPx.value <= Float(0.0) && ignoresSafeAreaEdges.contains(.bottom) {
                                         bottomPadding = max(0.dp, WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding())
                                     }
-                                    let contentModifier = Modifier.fillMaxSize().padding(top: topPadding, bottom: bottomPadding)
+                                    let contentModifier = Modifier.fillMaxSize().padding(top: topPadding, bottom: bottomPadding).absolutePadding(left: sideLeft, right: sideRight)
                                     let tabViewSafeArea = tabViewSafeAreaState.value
                                     var contentSafeArea = tabViewSafeArea?.insetting(Edge.bottom, to: bottomBarTopPx.value)
                                     // The content starts below the system bar, padded down even when a container above

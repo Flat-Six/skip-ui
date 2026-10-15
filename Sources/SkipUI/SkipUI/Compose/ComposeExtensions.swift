@@ -122,6 +122,27 @@ extension Modifier {
         }
     }
 
+    /// Widened past its constraints by `leftPx` and `rightPx` and moved left by `leftPx`, so what it draws reaches the
+    /// sides its parent keeps clear of (Flat-Six patch: a search field's ground under a cutout, as iOS's).
+    func reachingSides(leftPx: Int, rightPx: Int) -> Modifier {
+        guard leftPx > 0 || rightPx > 0 else {
+            return self
+        }
+        return self.layout { measurable, constraints in
+            let sides = leftPx + rightPx
+            guard constraints.hasBoundedWidth else {
+                let placeable = measurable.measure(constraints)
+                return layout(width: placeable.width, height: placeable.height) {
+                    placeable.place(x: 0, y: 0)
+                }
+            }
+            let placeable = measurable.measure(constraints.copy(minWidth: constraints.minWidth + sides, maxWidth: constraints.maxWidth + sides))
+            return layout(width: max(0, placeable.width - sides), height: placeable.height) {
+                placeable.place(x: -leftPx, y: 0)
+            }
+        }
+    }
+
     /// Add padding equivalent to the given safe area.
     @Composable func padding(safeArea: SafeArea) -> Modifier {
         let density = LocalDensity.current

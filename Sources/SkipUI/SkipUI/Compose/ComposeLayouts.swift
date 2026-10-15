@@ -22,6 +22,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.constrainWidth
+import kotlin.math.abs
 import androidx.compose.ui.unit.dp
 
 /// Compose a view with the given frame.
@@ -198,29 +200,38 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
     if expandInto.contains(Edge.Set.bottom) && edges.contains(Edge.Set.bottom) {
         expansionBottom = Int((safeArea.presentationBoundsPx.bottom - safeArea.safeBoundsPx.bottom).rounded())
     }
+    // The sides as SwiftUI has them (Flat-Six patch): a view reaches from where its parent put it to the
+    // presentation's edge — not the whole inset again from wherever it is, which took a view already at the edge (inside
+    // one that ignored the safe area) past it — and the safe area at the sides goes on to its content whole, where Skip
+    // had spent it: a container inside keeps its content clear of a cutout however its ancestors were laid out. Where the
+    // parent put it is learnt once it is laid out; until then the safe area's edge stands in, as before.
+    let slotState = remember { mutableStateOf<Rect?>(nil) }
+    let slotLeft = slotState.value?.left ?? safeArea.safeBoundsPx.left
+    let slotRight = slotState.value?.right ?? safeArea.safeBoundsPx.right
+    let isRTL = LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+    let leftEdge: Edge.Set = isRTL ? Edge.Set.trailing : Edge.Set.leading
+    let rightEdge: Edge.Set = isRTL ? Edge.Set.leading : Edge.Set.trailing
     var expansionLeft = 0
     var expansionRight = 0
-    let isRTL = LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
-    if isRTL {
-        if expandInto.contains(Edge.Set.leading) && edges.contains(Edge.Set.leading) {
-            expansionRight = Int((safeArea.presentationBoundsPx.right - safeArea.safeBoundsPx.right).rounded())
-        }
-        if expandInto.contains(Edge.Set.trailing) && edges.contains(Edge.Set.trailing) {
-            expansionLeft = Int((safeArea.safeBoundsPx.left - safeArea.presentationBoundsPx.left).rounded())
-        }
-    } else {
-        if expandInto.contains(Edge.Set.leading) && edges.contains(Edge.Set.leading) {
-            expansionLeft = Int((safeArea.safeBoundsPx.left - safeArea.presentationBoundsPx.left).rounded())
-        }
-        if expandInto.contains(Edge.Set.trailing) && edges.contains(Edge.Set.trailing) {
-            expansionRight = Int((safeArea.presentationBoundsPx.right - safeArea.safeBoundsPx.right).rounded())
-        }
+    if expandInto.contains(leftEdge) && edges.contains(leftEdge) {
+        expansionLeft = Int(max(Float(0.0), min(slotLeft, safeArea.safeBoundsPx.left) - safeArea.presentationBoundsPx.left).rounded())
+    }
+    if expandInto.contains(rightEdge) && edges.contains(rightEdge) {
+        expansionRight = Int(max(Float(0.0), safeArea.presentationBoundsPx.right - max(slotRight, safeArea.safeBoundsPx.right)).rounded())
+    }
+    // How far the view, so reached, lies in the unsafe sides: what a container keeps its content in by (the target's
+    // left and right; its top and bottom stay what it reached into)
+    var insetLeft = 0
+    var insetRight = 0
+    if edges.contains(leftEdge) {
+        insetLeft = Int(max(Float(0.0), safeArea.safeBoundsPx.left - (slotLeft - Float(expansionLeft))).rounded())
+    }
+    if edges.contains(rightEdge) {
+        insetRight = Int(max(Float(0.0), (slotRight + Float(expansionRight)) - safeArea.safeBoundsPx.right).rounded())
     }
 
     var (safeLeft, safeTop, safeRight, safeBottom) = safeArea.safeBoundsPx
-    safeLeft -= expansionLeft
     safeTop -= expansionTop
-    safeRight += expansionRight
     safeBottom += expansionBottom
 
     let contentSafeBounds = Rect(top: safeTop, left: safeLeft, bottom: safeBottom, right: safeRight)
@@ -230,6 +241,12 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
         return ComposeResult.ok
     } in: {
         Layout(modifier: modifier.onGloballyPositionedInWindow {
+            // where the parent put the view: across, the view keeps its slot (below)
+            let slot = $0
+            let known = slotState.value
+            if known == nil || abs(known!.left - slot.left) > Float(0.5) || abs(known!.right - slot.right) > Float(0.5) {
+                slotState.value = slot
+            }
             let probeEdges = expandInto.union(checkEdges)
             let newEdges = adjacentSafeAreaEdges(bounds: $0, safeArea: safeArea, isRTL: isRTL, checkEdges: probeEdges, bottomTolerancePx: effectiveBottomAdjacencyTolerancePx)
             if !logTag.isEmpty {
@@ -240,7 +257,7 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
             }
             edgesState.value = newEdges
         }, content: {
-            let expansion = IntRect(top: expansionTop, left: expansionLeft, bottom: expansionBottom, right: expansionRight)
+            let expansion = IntRect(top: expansionTop, left: insetLeft, bottom: expansionBottom, right: insetRight)
             target(expansion, edges.intersection(checkEdges))
         }) { measurables, constraints in
             guard !measurables.isEmpty() else {
@@ -253,13 +270,22 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
             // the min constraints
             let updatedConstraints = constraints.copy(maxWidth: constraint(constraints.maxWidth, adding: expansionLeft + expansionRight, atLeast: constraints.minWidth), maxHeight: constraint(constraints.maxHeight, adding: expansionTop + expansionBottom, atLeast: constraints.minHeight))
             let targetPlaceables = measurables.map { $0.measure(updatedConstraints) }
-            layout(width: targetPlaceables[0].width, height: targetPlaceables[0].height) {
-                // Layout will center extra space by default
+            // Across, the view keeps its parent's slot and draws its content out past it (Flat-Six patch): Skip reported
+            // the reached width and left Compose to centre it on the slot, which a parent with room to spare — a row — did
+            // not do: the content sat half the reach off (a side column's back button half under the screen's edge) and the
+            // row laid its other children out around the reached width. Content that did not take the width offered (a
+            // fixed size) stays where it is. The top and bottom as before.
+            let first = targetPlaceables[0]
+            let reachX = expansionLeft + expansionRight
+            let fillsWidth = reachX > 0 && constraints.hasBoundedWidth && first.width >= updatedConstraints.maxWidth
+            let width = fillsWidth ? constraints.constrainWidth(first.width - reachX) : first.width
+            layout(width: width, height: first.height) {
+                // Layout will center extra space by default (the top and bottom)
                 let relativeTop = expansionTop - ((expansionTop + expansionBottom) / 2)
                 let expansionLeading = isRTL ? expansionRight : expansionLeft
-                let relativeLeading = expansionLeading - ((expansionLeft + expansionRight) / 2)
+                let x = fillsWidth ? -expansionLeading : 0
                 for targetPlaceable in targetPlaceables {
-                    targetPlaceable.placeRelative(x = -relativeLeading, y = -relativeTop)
+                    targetPlaceable.placeRelative(x = x, y = -relativeTop)
                 }
             }
         }

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -157,9 +158,10 @@ public final class List : View, Renderable {
         let styling = ListStyling(style: style, backgroundVisibility: backgroundVisibility)
         let itemContext = context.content()
 
-        // When we layout, extend into safe areas that are due to system bars, not into any app chrome
+        // When we layout, extend into safe areas that are due to system bars, not into any app chrome — the sides too
+        // (Flat-Six patch): the list's ground to the screen's edge under a cutout, as iOS's, its rows in from it
         let safeArea = EnvironmentValues.shared._safeArea
-        var ignoresSafeAreaEdges: Edge.Set = [.top, .bottom]
+        var ignoresSafeAreaEdges: Edge.Set = [.top, .bottom, .leading, .trailing]
         ignoresSafeAreaEdges.formIntersection(safeArea?.absoluteSystemBarEdges ?? [])
         ComposeContainer(scrollAxes: .vertical, modifier: context.modifier, fillWidth: true, fillHeight: true, then: Modifier.background(BackgroundColor(styling: styling, isItem: false))) { modifier in
             IgnoresSafeAreaLayout(expandInto: ignoresSafeAreaEdges, checkEdges: [.bottom], modifier: modifier, logTag: "List") { safeAreaExpansion, safeAreaEdges in
@@ -188,7 +190,9 @@ public final class List : View, Renderable {
                     let density = LocalDensity.current
                     let headerSafeAreaHeight = with(density) { safeAreaExpansion.top.toDp() }
                     let footerSafeAreaHeight = with(density) { safeAreaExpansion.bottom.toDp() }
-                    RenderList(context: itemContext, styling: styling, arguments: ListArguments(headerSafeAreaHeight: headerSafeAreaHeight, footerSafeAreaHeight: footerSafeAreaHeight, safeAreaEdges: safeAreaEdges))
+                    let leftInset = with(density) { safeAreaExpansion.left.toDp() }
+                    let rightInset = with(density) { safeAreaExpansion.right.toDp() }
+                    RenderList(context: itemContext, styling: styling, arguments: ListArguments(headerSafeAreaHeight: headerSafeAreaHeight, footerSafeAreaHeight: footerSafeAreaHeight, safeAreaEdges: safeAreaEdges, leftInset: leftInset, rightInset: rightInset))
                     if let refreshState {
                         PullRefreshIndicator(refreshing.value, refreshState, Modifier.align(androidx.compose.ui.Alignment.TopCenter))
                     }
@@ -211,7 +215,7 @@ public final class List : View, Renderable {
         let leadingRenderable = renderables.firstOrNull({ !$0.isSwiftUIEmptyView })
         let leadingSection = leadingRenderable?.strip() as? LazySectionHeader   // its modifiers aside
 
-        var modifier = context.modifier
+        var modifier = context.modifier.absolutePadding(left: arguments.leftInset, right: arguments.rightInset)
         if styling.style != .plain {
             modifier = modifier.padding(start: Self.horizontalInset.dp, end: Self.horizontalInset.dp)
         }
@@ -1626,6 +1630,9 @@ struct ListStyling: Equatable {
     let headerSafeAreaHeight: Dp
     let footerSafeAreaHeight: Dp
     let safeAreaEdges: Edge.Set
+    /// The rows' way in from the sides: as far as the list reaches past the safe area there (Flat-Six patch).
+    let leftInset: Dp
+    let rightInset: Dp
 }
 #endif
 

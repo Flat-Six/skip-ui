@@ -25,6 +25,10 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.absolutePadding
+import androidx.compose.foundation.layout.add
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -170,9 +174,11 @@ public struct NavigationStack : View, Renderable {
             let safeArea = EnvironmentValues.shared._safeArea
             // We have to ignore the safe area around the entire NavDisplay to prevent push/pop animation issues with the system bars.
             // When we layout, only extend into safe areas that are due to system bars, not into any app chrome
-            var ignoresSafeAreaEdges: Edge.Set = [.top, .bottom]
+            // The sides too, where a system bar or a cutout is (Flat-Six patch): the bars and the grounds to the screen's
+            // edge, as iOS's under a phone's notch, the pages' content and the bars' buttons in from it by as much
+            var ignoresSafeAreaEdges: Edge.Set = [.top, .bottom, .leading, .trailing]
             ignoresSafeAreaEdges.formIntersection(safeArea?.absoluteSystemBarEdges ?? [])
-            IgnoresSafeAreaLayout(expandInto: ignoresSafeAreaEdges, checkEdges: ignoresSafeAreaEdges, logTag: "NavigationStack") { _, _ in
+            IgnoresSafeAreaLayout(expandInto: ignoresSafeAreaEdges, checkEdges: ignoresSafeAreaEdges, logTag: "NavigationStack") { expansion, _ in
                 ComposeContainer(modifier: context.modifier, fillWidth: true, fillHeight: true) { modifier in
                     let decoratorList = listOf(rememberSaveableStateHolderNavEntryDecorator<NavKey>())
                     let entryProvider = entryProvider {
@@ -188,7 +194,7 @@ public struct NavigationStack : View, Renderable {
                             let toolbarPreferencesCollector = PreferenceCollector<ToolbarPreferences>(key: ToolbarPreferenceKey.self, state: toolbarPreferences)
                             let toolbarContentPreferences = rememberSaveable(stateSaver: state.stateSaver as! Saver<Preference<ToolbarContentPreferences>, Any>) { mutableStateOf(Preference<ToolbarContentPreferences>(key: ToolbarContentPreferenceKey.self)) }
                             let toolbarContentPreferencesCollector = PreferenceCollector<ToolbarContentPreferences>(key: ToolbarContentPreferenceKey.self, state: toolbarContentPreferences)
-                            let arguments = NavigationEntryArguments(isRoot: true, state: state, safeArea: safeArea, ignoresSafeAreaEdges: ignoresSafeAreaEdges, title: title.value.reduced, titleIsSet: !title.value.nodes.isEmpty, toolbarPreferences: toolbarPreferences.value.reduced)
+                            let arguments = NavigationEntryArguments(isRoot: true, state: state, safeArea: safeArea, ignoresSafeAreaEdges: ignoresSafeAreaEdges, leftInsetPx: expansion.left, rightInsetPx: expansion.right, title: title.value.reduced, titleIsSet: !title.value.nodes.isEmpty, toolbarPreferences: toolbarPreferences.value.reduced)
                             PreferenceValues.shared.collectPreferences([titleCollector, toolbarPreferencesCollector, toolbarContentPreferencesCollector, destinationsCollector, destinationLayoutHintsCollector]) {
                                 RenderEntry(navigator: navigator, toolbarContent: toolbarContentPreferences, arguments: arguments, context: context) { context in
                                     root.Compose(context: context)
@@ -211,7 +217,7 @@ public struct NavigationStack : View, Renderable {
                                 $0.setdismiss(DismissAction(action: { navigator.value.navigateBack() }))
                                 return ComposeResult.ok
                             } in: {
-                                let arguments = NavigationEntryArguments(isRoot: false, state: state, safeArea: safeArea, ignoresSafeAreaEdges: ignoresSafeAreaEdges, title: title.value.reduced, titleIsSet: !title.value.nodes.isEmpty, toolbarPreferences: toolbarPreferences.value.reduced)
+                                let arguments = NavigationEntryArguments(isRoot: false, state: state, safeArea: safeArea, ignoresSafeAreaEdges: ignoresSafeAreaEdges, leftInsetPx: expansion.left, rightInsetPx: expansion.right, title: title.value.reduced, titleIsSet: !title.value.nodes.isEmpty, toolbarPreferences: toolbarPreferences.value.reduced)
                                 PreferenceValues.shared.collectPreferences([titleCollector, toolbarPreferencesCollector, toolbarContentPreferencesCollector, destinationsCollector, destinationLayoutHintsCollector]) {
                                     RenderEntry(navigator: navigator, toolbarContent: toolbarContentPreferences, arguments: arguments, context: context) { context in
                                         let destinationArguments = NavigationDestinationArguments(targetValue: targetValue)
@@ -576,7 +582,9 @@ public struct NavigationStack : View, Renderable {
                         }
                         // Use scrollBehavior (from the early call) for the TopAppBar to ensure it matches the nestedScrollConnection
                         options = options.copy(scrollBehavior: scrollBehavior)
-                        let topBarWindowInsets = hasAbsoluteTopSystemBar ? TopAppBarDefaults.windowInsets : WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
+                        // the sides as far as the stack reaches past the safe area there (Flat-Six patch): Material's own
+                        // insets know no cutout, and the stack may not touch the window's edge (a column)
+                        let topBarWindowInsets = (hasAbsoluteTopSystemBar ? TopAppBarDefaults.windowInsets.only(WindowInsetsSides.Top) : WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)).add(WindowInsets(left: arguments.leftInsetPx, top: 0, right: arguments.rightInsetPx, bottom: 0))
                         // An inline title's bar at iOS's 44, not Material's 64 (Flat-Six patch)
                         let inlineTopBarHeight = 44.dp
                         if isInlineTitleDisplayMode {
@@ -677,7 +685,7 @@ public struct NavigationStack : View, Renderable {
                     PaddingLayout(padding: EdgeInsets(top: 0.0, leading: 0.0, bottom: Double(-bottomPadding.value), trailing: 0.0), context: context.content()) { context in
                         let containerColor = showScrolledBackground ? bottomBarBackgroundColor : unscrolledBottomBarBackgroundColor
                         let usesBottomSystemBarInset = EnvironmentValues.shared._isEdgeToEdge == true && arguments.safeArea?.absoluteSystemBarEdges.contains(.bottom) == true
-                        let windowInsets = usesBottomSystemBarInset ? BottomAppBarDefaults.windowInsets : WindowInsets(bottom: 0.dp)
+                        let windowInsets = (usesBottomSystemBarInset ? BottomAppBarDefaults.windowInsets.only(WindowInsetsSides.Bottom) : WindowInsets(bottom: 0.dp)).add(WindowInsets(left: arguments.leftInsetPx, top: 0, right: arguments.rightInsetPx, bottom: 0))
                         var options = Material3BottomAppBarOptions(modifier: context.modifier.then(bottomBarModifier), containerColor: containerColor, contentColor: MaterialTheme.colorScheme.contentColorFor(containerColor), contentPadding: PaddingValues.Absolute(left: 16.dp, right: 16.dp))
                         if let updateOptions = EnvironmentValues.shared._material3BottomAppBar {
                             options = updateOptions(options)
@@ -723,6 +731,7 @@ public struct NavigationStack : View, Renderable {
                     bottomPadding = max(0.dp, WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding())
                 }
                 let contentModifier = Modifier.fillMaxWidth().weight(Float(1.0)).padding(top: topPadding, bottom: bottomPadding)
+                    .absolutePadding(left: with(density) { arguments.leftInsetPx.toDp() }, right: with(density) { arguments.rightInsetPx.toDp() })
 
                 topBar()
                 Box(modifier: contentModifier, contentAlignment: androidx.compose.ui.Alignment.Center) {
@@ -734,8 +743,10 @@ public struct NavigationStack : View, Renderable {
                         let searchFieldModifier = Modifier.height(searchFieldHeight.dp + searchFieldPadding)
                             .align(androidx.compose.ui.Alignment.TopCenter)
                             .offset({ IntOffset(0, Int(searchFieldOffsetPx.value)) })
+                            // its ground to the screen's edge, as the bar's over it, the field kept clear (Flat-Six patch)
+                            .reachingSides(leftPx: arguments.leftInsetPx, rightPx: arguments.rightInsetPx)
                             .background(searchFieldBackground)
-                            .padding(start: searchFieldPadding, bottom: searchFieldPadding, end: searchFieldPadding)
+                            .padding(start: searchFieldPadding + with(density) { arguments.leftInsetPx.toDp() }, bottom: searchFieldPadding, end: searchFieldPadding + with(density) { arguments.rightInsetPx.toDp() })
                             // Offset is negative. Fade out quickly as it scrolls in case it is moving up under transparent nav bar
                             .graphicsLayer { alpha = max(Float(0.0), (searchFieldFadeOffset + searchFieldOffsetPx.value) / searchFieldFadeOffset) }
                             .fillMaxWidth()
@@ -870,6 +881,8 @@ public struct NavigationStack : View, Renderable {
                 }
 
                 contentModifier = contentModifier.padding(top: topPadding, bottom: bottomPadding)
+                    // in from the sides by as much as the stack reaches past the safe area there (Flat-Six patch)
+                    .absolutePadding(left: with(density) { arguments.leftInsetPx.toDp() }, right: with(density) { arguments.rightInsetPx.toDp() })
                 // The content's safe area ends where its box does at the bottom (Flat-Six patch): with no bottom bar the
                 // system's inset pads the box, and a safe area that did not say so left a child ignoring the safe area
                 // that much short of the screen's foot — a full-screen view 24 dp short, centred 12 dp low. The edge
@@ -892,8 +905,10 @@ public struct NavigationStack : View, Renderable {
                         let searchFieldModifier = Modifier.height(searchFieldHeight.dp + searchFieldPadding)
                             .align(androidx.compose.ui.Alignment.TopCenter)
                             .offset({ IntOffset(0, Int(searchFieldOffsetPx.value)) })
+                            // its ground to the screen's edge, as the bar's over it, the field kept clear (Flat-Six patch)
+                            .reachingSides(leftPx: arguments.leftInsetPx, rightPx: arguments.rightInsetPx)
                             .background(searchFieldBackground)
-                            .padding(start: searchFieldPadding, bottom: searchFieldPadding, end: searchFieldPadding)
+                            .padding(start: searchFieldPadding + with(density) { arguments.leftInsetPx.toDp() }, bottom: searchFieldPadding, end: searchFieldPadding + with(density) { arguments.rightInsetPx.toDp() })
                             // Offset is negative. Fade out quickly as it scrolls in case it is moving up under transparent nav bar
                             .graphicsLayer { alpha = max(Float(0.0), (searchFieldFadeOffset + searchFieldOffsetPx.value) / searchFieldFadeOffset) }
                             .fillMaxWidth()
@@ -965,6 +980,10 @@ public struct SkipNavigationStackPushKey : NavKey, Hashable {
     let state: Navigator.BackStackState
     let safeArea: SafeArea?
     let ignoresSafeAreaEdges: Edge.Set
+    /// How far the stack reaches past the safe area at its left and its right, in pixels: a cutout's or a side system
+    /// bar's width, which the bars' buttons and the content keep clear of (Flat-Six patch).
+    let leftInsetPx: Int
+    let rightInsetPx: Int
     let title: Text
     /// A title given, even an empty one (Flat-Six patch): the next page's back button tells the two apart, as iOS's.
     let titleIsSet: Bool
