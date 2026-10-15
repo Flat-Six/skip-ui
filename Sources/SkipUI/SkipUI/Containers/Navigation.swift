@@ -186,7 +186,7 @@ public struct NavigationStack : View, Renderable {
                             let toolbarPreferencesCollector = PreferenceCollector<ToolbarPreferences>(key: ToolbarPreferenceKey.self, state: toolbarPreferences)
                             let toolbarContentPreferences = rememberSaveable(stateSaver: state.stateSaver as! Saver<Preference<ToolbarContentPreferences>, Any>) { mutableStateOf(Preference<ToolbarContentPreferences>(key: ToolbarContentPreferenceKey.self)) }
                             let toolbarContentPreferencesCollector = PreferenceCollector<ToolbarContentPreferences>(key: ToolbarContentPreferenceKey.self, state: toolbarContentPreferences)
-                            let arguments = NavigationEntryArguments(isRoot: true, state: state, safeArea: safeArea, ignoresSafeAreaEdges: ignoresSafeAreaEdges, title: title.value.reduced, toolbarPreferences: toolbarPreferences.value.reduced)
+                            let arguments = NavigationEntryArguments(isRoot: true, state: state, safeArea: safeArea, ignoresSafeAreaEdges: ignoresSafeAreaEdges, title: title.value.reduced, titleIsSet: !title.value.nodes.isEmpty, toolbarPreferences: toolbarPreferences.value.reduced)
                             PreferenceValues.shared.collectPreferences([titleCollector, toolbarPreferencesCollector, toolbarContentPreferencesCollector, destinationsCollector, destinationLayoutHintsCollector]) {
                                 RenderEntry(navigator: navigator, toolbarContent: toolbarContentPreferences, arguments: arguments, context: context) { context in
                                     root.Compose(context: context)
@@ -209,7 +209,7 @@ public struct NavigationStack : View, Renderable {
                                 $0.setdismiss(DismissAction(action: { navigator.value.navigateBack() }))
                                 return ComposeResult.ok
                             } in: {
-                                let arguments = NavigationEntryArguments(isRoot: false, state: state, safeArea: safeArea, ignoresSafeAreaEdges: ignoresSafeAreaEdges, title: title.value.reduced, toolbarPreferences: toolbarPreferences.value.reduced)
+                                let arguments = NavigationEntryArguments(isRoot: false, state: state, safeArea: safeArea, ignoresSafeAreaEdges: ignoresSafeAreaEdges, title: title.value.reduced, titleIsSet: !title.value.nodes.isEmpty, toolbarPreferences: toolbarPreferences.value.reduced)
                                 PreferenceValues.shared.collectPreferences([titleCollector, toolbarPreferencesCollector, toolbarContentPreferencesCollector, destinationsCollector, destinationLayoutHintsCollector]) {
                                     RenderEntry(navigator: navigator, toolbarContent: toolbarContentPreferences, arguments: arguments, context: context) { context in
                                         let destinationArguments = NavigationDestinationArguments(targetValue: targetValue)
@@ -291,7 +291,8 @@ public struct NavigationStack : View, Renderable {
             title = arguments.title
             titleDisplayPreference = arguments.toolbarPreferences.titleDisplayMode
         }
-        state.title = hasTitle ? title : nil   // for the next entry's back button (Flat-Six patch)
+        // for the next entry's back button (Flat-Six patch): an empty title given is kept as one
+        state.title = hasTitle ? title : (arguments.titleIsSet ? Text(verbatim: "") : nil)
 
         let topBarPreferences = arguments.toolbarPreferences.navigationBar
         let bottomBarPreferences = arguments.toolbarPreferences.bottomBar
@@ -524,9 +525,11 @@ public struct NavigationStack : View, Renderable {
                                             // in the tint, not Material's arrow. As iOS: the title where it fits beside this
                                             // page's centred one, else "Back", else the chevron alone (a 17 pt character is
                                             // about half the width of a centred one's share of the bar)
-                                            let previousTitle = navigator.value.previousState(before: state)?.title?.localizedTextString() ?? ""
+                                            let previousTitleText = navigator.value.previousState(before: state)?.title
+                                            let previousTitle = previousTitleText?.localizedTextString() ?? ""
                                             let ownTitleRoom = Double(hasTitle ? title.localizedTextString().count : 0) * 0.53
-                                            let backTitle = !previousTitle.isEmpty && Double(previousTitle.count) + ownTitleRoom <= 21.0 ? previousTitle : (4.0 + ownTitleRoom <= 21.0 ? "Back" : "")
+                                            // a page before titled "" leaves the chevron alone, as on iOS
+                                            let backTitle = previousTitleText != nil && previousTitle.isEmpty ? "" : (!previousTitle.isEmpty && Double(previousTitle.count) + ownTitleRoom <= 21.0 ? previousTitle : (4.0 + ownTitleRoom <= 21.0 ? "Back" : ""))
                                             Row(modifier: Modifier.clickable(interactionSource: nil, indication: nil, onClick: { navigator.value.navigateBack() }).height(44.dp).padding(start: 2.dp, end: 8.dp), verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
                                                 Icon(imageVector: Icons.AutoMirrored.Filled.ArrowBackIos, contentDescription: "Back", tint: tint.colorImpl(), modifier: Modifier.size(22.dp))
                                                 if !backTitle.isEmpty {
@@ -928,6 +931,8 @@ public struct SkipNavigationStackPushKey : NavKey, Hashable {
     let safeArea: SafeArea?
     let ignoresSafeAreaEdges: Edge.Set
     let title: Text
+    /// A title given, even an empty one (Flat-Six patch): the next page's back button tells the two apart, as iOS's.
+    let titleIsSet: Bool
     let toolbarPreferences: ToolbarPreferences
 }
 
