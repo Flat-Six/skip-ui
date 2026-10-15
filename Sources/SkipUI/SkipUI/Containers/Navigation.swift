@@ -917,8 +917,10 @@ public struct NavigationStack : View, Renderable {
         guard titleDisplayMode == .automatic else {
             return titleDisplayMode == ToolbarTitleDisplayMode.inline
         }
-        // Default to inline if in landscape or a sheet
-        if let safeArea, safeArea.presentationBoundsPx.width > safeArea.presentationBoundsPx.height {
+        // Default to inline in a compact height or a sheet: UIKit shows a large title only in a regular height, so a
+        // phone on its side has an inline one and an iPad in landscape its large one (Flat-Six patch: a window wider
+        // than tall took the tablet's large titles inline)
+        if EnvironmentValues.shared.verticalSizeClass == UserInterfaceSizeClass.compact {
             return true
         }
         return EnvironmentValues.shared._sheetDepth > 0
