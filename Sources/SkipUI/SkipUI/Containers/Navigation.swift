@@ -497,11 +497,13 @@ public struct NavigationStack : View, Renderable {
                         // Use scrollBehavior (from the early call) for the TopAppBar to ensure it matches the nestedScrollConnection
                         options = options.copy(scrollBehavior: scrollBehavior)
                         let topBarWindowInsets = hasAbsoluteTopSystemBar ? TopAppBarDefaults.windowInsets : WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
+                        // An inline title's bar at iOS's 44, not Material's 64 (Flat-Six patch)
+                        let inlineTopBarHeight = 44.dp
                         if isInlineTitleDisplayMode {
                             if options.preferCenterAlignedStyle {
-                                CenterAlignedTopAppBar(title: options.title, modifier: options.modifier, navigationIcon: options.navigationIcon, actions: { topBarActions() }, colors: options.colors, scrollBehavior: options.scrollBehavior, windowInsets: topBarWindowInsets)
+                                CenterAlignedTopAppBar(title: options.title, modifier: options.modifier, navigationIcon: options.navigationIcon, actions: { topBarActions() }, expandedHeight: inlineTopBarHeight, windowInsets: topBarWindowInsets, colors: options.colors, scrollBehavior: options.scrollBehavior)
                             } else {
-                                TopAppBar(title: options.title, modifier: options.modifier, navigationIcon: options.navigationIcon, actions: { topBarActions() }, colors: options.colors, scrollBehavior: options.scrollBehavior, windowInsets: topBarWindowInsets)
+                                TopAppBar(title: options.title, modifier: options.modifier, navigationIcon: options.navigationIcon, actions: { topBarActions() }, expandedHeight: inlineTopBarHeight, windowInsets: topBarWindowInsets, colors: options.colors, scrollBehavior: options.scrollBehavior)
                             }
                         } else {
                             // Force a larger, bold title style in the uncollapsed state by replacing the headlineSmall style the bar uses
