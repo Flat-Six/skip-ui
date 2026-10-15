@@ -54,6 +54,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -80,6 +82,10 @@ import struct CoreGraphics.CGFloat
 
 /// Common corner radius for our overlay presentations.
 let overlayPresentationCornerRadius = 16.0
+
+/// A sheet's corners as a card on a wide window (Flat-Six patch): iPadOS's continuous corner leaves the straight edge
+/// 14 pt from the corner (iOS 17's iPad (10th generation))
+let cardCornerRadius = 14.0
 
 // Material3 AlertDialog padding and spacing (match AlertDialog.kt).
 private let AlertDialogPadding: PaddingValues = PaddingValues(start: 24.dp, top: 24.dp, end: 24.dp, bottom: 24.dp)
@@ -124,12 +130,28 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
         let contentRenderables = ComposeBuilder.from(content).Evaluate(context: context, options: EvaluateOptions(isKeepNonModified: true).value)
         let topInset = remember { mutableStateOf(0.dp) }
         let density = LocalDensity.current
-        let handleHeight = isFullScreen ? 0.dp : 8.dp
+        // A sheet as UIKit presents it by the window (Flat-Six patch): in a compact height — a phone on its side — it
+        // takes the screen, every edge and the cutout's side the safe area's; in a regular width with a regular height —
+        // a tablet — it is a card centred on the window, the app's size where it gives one (presentationFixedSize, as an
+        // iOS 18 sizing does) and else iPadOS's own page sheet's, 704 wide and the height less 44 above and below, 996 at
+        // most (measured on iOS 17's iPads); else a sheet up from the foot, as before. Skip rose from the foot 640 dp
+        // wide, whatever the window.
+        let isCompactHeight = !isFullScreen && EnvironmentValues.shared.verticalSizeClass == UserInterfaceSizeClass.compact
+        let isCard = !isFullScreen && !isCompactHeight && EnvironmentValues.shared.horizontalSizeClass == UserInterfaceSizeClass.regular
+        let fixedSize = contentRenderables.firstNotNullOfOrNull { renderable in
+            renderable.forEachModifier { $0 as? PresentationFixedSizeModifier }
+        }
+        let windowSize = LocalWindowInfo.current.containerSize
+        let windowWidth = with(density) { windowSize.width.toDp() }
+        let windowHeight = with(density) { windowSize.height.toDp() }
+        let cardWidth = min(fixedSize != nil ? fixedSize!.width.dp : 704.dp, windowWidth - 40.dp)
+        let cardHeight = min(fixedSize != nil ? fixedSize!.height.dp : 996.dp, windowHeight - 88.dp)
+        let handleHeight = isFullScreen || isCard ? 0.dp : 8.dp
         let handleHeightPx = with(LocalDensity.current) { handleHeight.toPx() }
-        let handlePadding = isFullScreen ? 0.dp : 10.dp
+        let handlePadding = isFullScreen || isCard ? 0.dp : 10.dp
         let handlePaddingPx = with(LocalDensity.current) { handlePadding.toPx() }
-        let sheetMaxWidth = isFullScreen ? Dp.Unspecified : BottomSheetDefaults.SheetMaxWidth
-        let shape = GenericShape { size, _ in
+        let sheetMaxWidth = isFullScreen || isCompactHeight ? Dp.Unspecified : (isCard ? cardWidth : BottomSheetDefaults.SheetMaxWidth)
+        let shape = isCard ? RectangleShape : GenericShape { size, _ in
             // The modal content resolves window insets later in composition. Read here,
             // when constructing the outline, so clipping and content use the same inset.
             let topInsetPx = with(density) { topInset.value.toPx() }
@@ -148,14 +170,14 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
             isPresented.set(false)
         }
         let properties = ModalBottomSheetProperties(shouldDismissOnBackPress: !backDismissDisabled)
-        ModalBottomSheet(onDismissRequest: onDismissRequest, sheetState: sheetState, sheetMaxWidth: sheetMaxWidth, sheetGesturesEnabled: !interactiveDismissDisabled, containerColor: presentationColor != nil ? androidx.compose.ui.graphics.Color.Transparent : androidx.compose.ui.graphics.Color.Unspecified, shape: shape, dragHandle: nil, contentWindowInsets: { WindowInsets(0.dp, 0.dp, 0.dp, 0.dp) }, properties: properties) {
+        ModalBottomSheet(onDismissRequest: onDismissRequest, sheetState: sheetState, sheetMaxWidth: sheetMaxWidth, sheetGesturesEnabled: !interactiveDismissDisabled, containerColor: presentationColor != nil || isCard ? androidx.compose.ui.graphics.Color.Transparent : androidx.compose.ui.graphics.Color.Unspecified, shape: shape, dragHandle: nil, contentWindowInsets: { WindowInsets(0.dp, 0.dp, 0.dp, 0.dp) }, properties: properties) {
             
             SyncSystemBarsWithTheme()
             
             let verticalSizeClass = EnvironmentValues.shared.verticalSizeClass
             let isEdgeToEdge = EnvironmentValues.shared._isEdgeToEdge == true
             let sheetDepth = EnvironmentValues.shared._sheetDepth
-            var systemBarEdges: Edge.Set = isFullScreen ? .all : [.top, .bottom]
+            var systemBarEdges: Edge.Set = isFullScreen || isCompactHeight ? .all : [.top, .bottom]
 
             let detentPreferences = rememberSaveable(stateSaver: context.stateSaver as! Saver<Preference<PresentationDetentPreferences>, Any>) { mutableStateOf(Preference<PresentationDetentPreferences>(key: PresentationDetentPreferenceKey.self)) }
             let detentPreferencesCollector = PreferenceCollector<PresentationDetentPreferences>(key: PresentationDetentPreferences.self, state: detentPreferences)
@@ -164,7 +186,19 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
             let dragIndicatorPreferencesCollector = PreferenceCollector<PresentationDragIndicatorPreferences>(key: PresentationDragIndicatorPreferences.self, state: dragIndicatorPreferences)
             let reducedDragIndicatorVisibility = dragIndicatorPreferences.value.reduced.visibility
 
-            if !isFullScreen && verticalSizeClass != .compact {
+            if isCard {
+                // centred, and clear of the keyboard: the card comes up by what it would leave under it, to the status
+                // bar at most; around it the window's dim, which dismisses it as iOS's does
+                systemBarEdges = []
+                let keyboardTop = windowHeight - WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+                var top = (windowHeight - cardHeight) / 2
+                let under = top + cardHeight + 16.dp - keyboardTop
+                if under > 0.dp {
+                    top = max(WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding(), top - under)
+                }
+                topInset.value = top
+                androidx.compose.foundation.layout.Spacer(modifier: Modifier.fillMaxWidth().height(top).clickable(interactionSource: nil, indication: nil, enabled: !interactiveDismissDisabled, onClick: { isPresented.set(false) }))
+            } else if !isFullScreen && verticalSizeClass != .compact {
                 systemBarEdges.remove(.top)
                 if !isEdgeToEdge {
                     systemBarEdges.remove(.bottom)
@@ -223,8 +257,8 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
                 topInset.value = 0.dp
             }
 
-            let clipShape = RoundedCornerShape(topStart: isFullScreen ? 0.dp : overlayPresentationCornerRadius.dp, topEnd: isFullScreen ? 0.dp : overlayPresentationCornerRadius.dp)
-            let contentModifier = Modifier.weight(Float(1.0)).clip(clipShape)
+            let clipShape = isCard ? RoundedCornerShape(cardCornerRadius.dp) : RoundedCornerShape(topStart: isFullScreen || isCompactHeight ? 0.dp : overlayPresentationCornerRadius.dp, topEnd: isFullScreen || isCompactHeight ? 0.dp : overlayPresentationCornerRadius.dp)
+            let contentModifier = isCard ? Modifier.fillMaxWidth().height(cardHeight).clip(clipShape) : Modifier.weight(Float(1.0)).clip(clipShape)
             Box(modifier: interactiveDismissDisabled ? contentModifier.nestedScroll(DisableScrollToDismissConnection()) : contentModifier) {
                 // Place outside of PresentationRoot recomposes
                 let stateSaver = remember { ComposeStateSaver() }
@@ -248,7 +282,9 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
                 }
                 }
             }
-            if !isEdgeToEdge {
+            if isCard {
+                androidx.compose.foundation.layout.Spacer(modifier: Modifier.fillMaxWidth().weight(Float(1.0)).clickable(interactionSource: nil, indication: nil, enabled: !interactiveDismissDisabled, onClick: { isPresented.set(false) }))
+            } else if !isEdgeToEdge {
                 // Move the presentation root content area above the bottom bar
                 let inset = max(0.dp, WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding())
                 androidx.compose.foundation.layout.Spacer(modifier: Modifier.height(inset))
@@ -1321,6 +1357,17 @@ extension View {
         #endif
     }
 
+    /// A sheet's size where it is a card over a wide window — a tablet's (Flat-Six patch: what an iOS 18 sizing does for
+    /// an app that gives its sheets one size on an iPad; Skip has no sizing). Apply to the root view of the sheet's content.
+    // SKIP @bridge
+    public func presentationFixedSize(width: CGFloat, height: CGFloat) -> any View {
+        #if SKIP
+        return ModifiedContent(content: self, modifier: PresentationFixedSizeModifier(width: width, height: height))
+        #else
+        return self
+        #endif
+    }
+
     @available(*, unavailable)
     public func presentationBackground(_ style: any ShapeStyle) -> some View {
         return self
@@ -1394,6 +1441,18 @@ final class PresentationModifier: SideEffectModifier {
             }
             return ComposeResult.ok
         }
+    }
+}
+
+/// A sheet's size as a card on a wide window (Flat-Six patch).
+final class PresentationFixedSizeModifier: RenderModifier {
+    let width: CGFloat
+    let height: CGFloat
+
+    init(width: CGFloat, height: CGFloat) {
+        self.width = width
+        self.height = height
+        super.init()
     }
 }
 
