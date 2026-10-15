@@ -27,11 +27,14 @@ import androidx.compose.ui.unit.dp
 /// Compose a view with the given frame.
 @Composable func FrameLayout(content: Renderable, context: ComposeContext, width: CGFloat?, height: CGFloat?, alignment: Alignment) {
     var modifier = context.modifier
+    // A frame of zero width or height drew nothing hung outside it on Android; a pixel's does, as SwiftUI's zero frame
+    // does (Flat-Six patch: a label centred on a table column's edge)
+    let pixel = with(LocalDensity.current) { 1.toDp() }
     if let width {
-        modifier = modifier.requiredWidth(width.dp)
+        modifier = modifier.requiredWidth(width > 0.0 ? width.dp : pixel)
     }
     if let height {
-        modifier = modifier.requiredHeight(height.dp)
+        modifier = modifier.requiredHeight(height > 0.0 ? height.dp : pixel)
     }
 
     // If our content has a zIndex, we need to pull it into our modifiers so that it applies within the original
