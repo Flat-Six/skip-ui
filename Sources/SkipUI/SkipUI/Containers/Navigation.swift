@@ -711,6 +711,7 @@ public struct NavigationStack : View, Renderable {
                         }
                         $0.set_searchableState(searchableState)
                         $0.set_isNavigationRoot(arguments.isRoot)
+                        $0.set_isUnderLargeTitle(showsTopBar && !isInlineTitleDisplayMode)   // Flat-Six patch
                         $0.set_nestedScrollConnection(scrollBehavior.nestedScrollConnection)
                         return ComposeResult.ok
                     } in: {
@@ -855,6 +856,7 @@ public struct NavigationStack : View, Renderable {
                         }
                         $0.set_searchableState(searchableState)
                         $0.set_isNavigationRoot(arguments.isRoot)
+                        $0.set_isUnderLargeTitle(showsTopBar && !isInlineTitleDisplayMode)   // Flat-Six patch
                         $0.set_nestedScrollConnection(scrollBehavior.nestedScrollConnection)
                         return ComposeResult.ok
                     } in: {

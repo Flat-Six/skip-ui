@@ -731,6 +731,13 @@ extension EnvironmentValues {
         set { setBuiltinValue(key: "_isNavigationRoot", value: newValue, defaultValue: { nil }) }
     }
 
+    /// Whether the content is under a large title's bar (Flat-Six patch): a grouped list starts a header-less first
+    /// section close under it, as iOS does.
+    var _isUnderLargeTitle: Bool? {
+        get { builtinValue(key: "_isUnderLargeTitle", defaultValue: { nil }) as! Bool? }
+        set { setBuiltinValue(key: "_isUnderLargeTitle", value: newValue, defaultValue: { nil }) }
+    }
+
     var _isHitTestingEnabled: Bool {
         get { builtinValue(key: "_isHitTestingEnabled", defaultValue: { true }) as! Bool }
         set { setBuiltinValue(key: "_isHitTestingEnabled", value: newValue, defaultValue: { true }) }

@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.GenericShape
@@ -287,6 +288,9 @@ public final class List : View, Renderable {
            iOS list behavior of "only one row's swipe actions visible at once". */
         let activeSwipeKey = remember { mutableStateOf<String?>(nil) }
 
+        // Under a large title a header-less first section starts close under the bar, as iOS's does: no top inset of the
+        // list's own, and its empty header taken as the top one (Flat-Six patch)
+        let closeUnderTitle = EnvironmentValues.shared._isUnderLargeTitle == true && (renderables.firstOrNull() as? LazySectionHeader)?.content.size == 0
         // Combine contentPadding with contentMargins additively
         var contentPadding = EnvironmentValues.shared._contentPadding.asPaddingValues()
         var hasTopContentMargin = false
@@ -443,7 +447,8 @@ public final class List : View, Renderable {
                     let sectionKey = Self.sectionKey(for: sectionIdentity, fallbackIndex: currentSectionIndex)
                     let headerRenderables = content.size == 0 ? listOf(EmptyView()) : content
                     let firstRenderable = (renderables.firstOrNull() as? LazySectionHeader)?.content.firstOrNull()
-                    let isTop = firstRenderable === headerRenderables.firstOrNull()
+                    let isTop = firstRenderable === headerRenderables.firstOrNull() || (closeUnderTitle && currentSectionIndex == 0)
+                    let isFlush = closeUnderTitle && currentSectionIndex == 0
                     var renderedCount = 0
                     for renderableIndex in 0..<headerRenderables.size {
                         let renderable = headerRenderables[renderableIndex]
@@ -474,7 +479,7 @@ public final class List : View, Renderable {
                                 } else {
                                     itemModifier = Modifier.animateItem(fadeInSpec: nil, fadeOutSpec: nil)
                                 }
-                                RenderSectionHeader(content: renderable, context: itemContext, modifier: itemModifier, styling: styling, isTop: isTop)
+                                RenderSectionHeader(content: renderable, context: itemContext, modifier: itemModifier, styling: styling, isTop: isTop, isFlush: isFlush)
                             }
                         }
                         renderedCount = renderedCount + 1
@@ -539,7 +544,7 @@ public final class List : View, Renderable {
             if hasHeader {
                 let hasTopSection = renderables.firstOrNull() is LazySectionHeader
                 item {
-                    RenderHeader(styling: styling, safeAreaHeight: isSearchable ? 0.dp : arguments.headerSafeAreaHeight, hasTopSection: hasTopSection, hasTopMargin: hasTopContentMargin)
+                    RenderHeader(styling: styling, safeAreaHeight: isSearchable ? 0.dp : arguments.headerSafeAreaHeight, hasTopSection: hasTopSection, hasTopMargin: hasTopContentMargin || closeUnderTitle)
                 }
             }
             for renderable in renderables {
@@ -1269,8 +1274,15 @@ public final class List : View, Renderable {
         }
     }
 
-    @Composable private func RenderSectionHeader(content: Renderable, context: ComposeContext, modifier: Modifier = Modifier, styling: ListStyling, isTop: Bool) {
+    @Composable private func RenderSectionHeader(content: Renderable, context: ComposeContext, modifier: Modifier = Modifier, styling: ListStyling, isTop: Bool, isFlush: Bool = false) {
         let backgroundColor = BackgroundColor(styling: styling, isItem: false)
+        if isFlush && styling.style != .plain {
+            // No header at all: only the section's top corners, drawn over its first row (Flat-Six patch)
+            Box(modifier: modifier.fillMaxWidth().height(0.dp).zIndex(Float(0.5)).then(context.modifier)) {
+                RenderRoundedCorners(isTop: true, fill: backgroundColor, overhang: true)
+            }
+            return
+        }
         let containerModifier = modifier.fillMaxWidth()
             .zIndex(Float(0.5))
             .background(backgroundColor)
@@ -1370,7 +1382,8 @@ public final class List : View, Renderable {
         }
     }
 
-    @Composable private func RenderRoundedCorners(isTop: Bool, fill: androidx.compose.ui.graphics.Color) {
+    /// - Parameter overhang: drawn below a zero-height container, over the row under it (Flat-Six patch)
+    @Composable private func RenderRoundedCorners(isTop: Bool, fill: androidx.compose.ui.graphics.Color, overhang: Bool = false) {
         let shape = GenericShape { size, _ in
             let rect = Rect(left: Float(0.0), top: Float(0.0), right: size.width, bottom: size.height)
             let rectPath = androidx.compose.ui.graphics.Path()
@@ -1386,7 +1399,12 @@ public final class List : View, Renderable {
             addPath(combine(PathOperation.Difference, rectPath, roundedRectPath))
         }
         let offset = isTop ? listSectionCornerRadius.dp : -listSectionCornerRadius.dp
-        let modifier = Modifier
+        let modifier = overhang ? Modifier
+            .fillMaxWidth()
+            .wrapContentHeight(align: androidx.compose.ui.Alignment.Top, unbounded: true)
+            .height(listSectionCornerRadius.dp)
+            .clip(shape)
+            .background(fill) : Modifier
             .fillMaxWidth()
             .height(listSectionCornerRadius.dp)
             .offset(y: offset)
