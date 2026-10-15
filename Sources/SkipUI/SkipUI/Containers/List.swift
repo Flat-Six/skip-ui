@@ -203,6 +203,9 @@ public final class List : View, Renderable {
         } else {
             renderables = listOf()
         }
+        // The list's first content past any empty view — an `if` whose condition is false (Flat-Six patch): SwiftUI
+        // takes the section after it for the top one, where Skip let the empty view stand first
+        let leadingRenderable = renderables.firstOrNull({ !$0.isSwiftUIEmptyView })
 
         var modifier = context.modifier
         if styling.style != .plain {
@@ -290,7 +293,7 @@ public final class List : View, Renderable {
 
         // Under a large title a header-less first section starts close under the bar, as iOS's does: no top inset of the
         // list's own, and its empty header taken as the top one (Flat-Six patch)
-        let closeUnderTitle = EnvironmentValues.shared._isUnderLargeTitle == true && (renderables.firstOrNull() as? LazySectionHeader)?.content.size == 0
+        let closeUnderTitle = EnvironmentValues.shared._isUnderLargeTitle == true && (leadingRenderable as? LazySectionHeader)?.content.size == 0
         // Combine contentPadding with contentMargins additively
         var contentPadding = EnvironmentValues.shared._contentPadding.asPaddingValues()
         var hasTopContentMargin = false
@@ -446,8 +449,12 @@ public final class List : View, Renderable {
                     let currentSectionIndex = sectionIndex
                     let sectionKey = Self.sectionKey(for: sectionIdentity, fallbackIndex: currentSectionIndex)
                     let headerRenderables = content.size == 0 ? listOf(EmptyView()) : content
-                    let firstRenderable = (renderables.firstOrNull() as? LazySectionHeader)?.content.firstOrNull()
-                    let isTop = firstRenderable === headerRenderables.firstOrNull() || (closeUnderTitle && currentSectionIndex == 0)
+                    let firstRenderable = (leadingRenderable as? LazySectionHeader)?.content.firstOrNull()
+                    // The list's first section is the top one where it has a header, by order (Flat-Six patch): the
+                    // identity check never matched in Fuse mode, where the header's content reaches here as other objects
+                    // than the list's first item holds, so every first header took a lower one's gap. A header-less first
+                    // section keeps that gap, about iOS's, except flush under a large title.
+                    let isTop = (currentSectionIndex == 0 && leadingRenderable is LazySectionHeader && (content.size > 0 || closeUnderTitle)) || firstRenderable === headerRenderables.firstOrNull()
                     let isFlush = closeUnderTitle && currentSectionIndex == 0
                     var renderedCount = 0
                     for renderableIndex in 0..<headerRenderables.size {
@@ -542,12 +549,18 @@ public final class List : View, Renderable {
                 }
             }
             if hasHeader {
-                let hasTopSection = renderables.firstOrNull() is LazySectionHeader
+                let hasTopSection = leadingRenderable is LazySectionHeader
                 item {
                     RenderHeader(styling: styling, safeAreaHeight: isSearchable ? 0.dp : arguments.headerSafeAreaHeight, hasTopSection: hasTopSection, hasTopMargin: hasTopContentMargin || closeUnderTitle)
                 }
             }
             for renderable in renderables {
+                // An empty view (an `if` whose condition is false) is no item (Flat-Six patch): SwiftUI lays out nothing
+                // for it, where Skip's item opened a section of its own — an empty footer before the next section's
+                // header, or an empty header and footer between two sections
+                if renderable.isSwiftUIEmptyView {
+                    continue
+                }
                 if let factory = renderable as? LazyItemFactory, factory.shouldProduceLazyItems() {
                     factory.produceLazyItems(collector: itemCollector.value, modifiers: listOf(), level: 0)
                 } else {
