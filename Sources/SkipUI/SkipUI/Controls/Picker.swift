@@ -136,9 +136,10 @@ public final class Picker<SelectionValue> : View, Renderable {
         let selectedValueLabel: Renderable
         let isMenu: Bool
         if style == .automatic || style == .menu {
-            selectedValueLabel = HStack(spacing: 2.0) {
+            // iOS's menu picker: the value, and the up-and-down chevron small beside it (Flat-Six patch)
+            selectedValueLabel = HStack(spacing: 4.0) {
                 selectedValueRenderable.asView()
-                Image(systemName: "chevron.down").accessibilityHidden(true)
+                Image(systemName: "chevron.up.chevron.down").font(Font.caption.weight(Font.Weight.semibold)).accessibilityHidden(true)
             }
             isMenu = true
         } else {

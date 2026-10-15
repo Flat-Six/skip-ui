@@ -545,6 +545,7 @@ public struct Image : View, Renderable, Equatable {
         case "house": return "Icons.Outlined.Home" //􀎞
         case "info.circle": return "Icons.Outlined.Info" //􀅴
         case "chevron.down": return "Icons.Outlined.KeyboardArrowDown" //􀆈
+        case "chevron.up.chevron.down": return "Icons.Outlined.UnfoldMore" // a menu picker's, iOS's (Flat-Six patch)
         case "chevron.left": return "Icons.Outlined.KeyboardArrowLeft" //􀆉
         case "chevron.right": return "Icons.Outlined.KeyboardArrowRight" //􀆊
         case "chevron.up": return "Icons.Outlined.KeyboardArrowUp" //􀆇
@@ -638,6 +639,7 @@ public struct Image : View, Renderable, Equatable {
         case "Icons.Outlined.Home": return Icons.Outlined.Home
         case "Icons.Outlined.Info": return Icons.Outlined.Info
         case "Icons.Outlined.KeyboardArrowDown": return Icons.Outlined.KeyboardArrowDown
+        case "Icons.Outlined.UnfoldMore": return Icons.Outlined.UnfoldMore
         case "Icons.Outlined.KeyboardArrowLeft": return Icons.Outlined.KeyboardArrowLeft // Compose 1.6 TODO: Icons.AutoMirrored.Outlined.KeyboardArrowLeft
         case "Icons.Outlined.KeyboardArrowRight": return Icons.Outlined.KeyboardArrowRight // Compose 1.6 TODO: Icons.AutoMirrored.Outlined.KeyboardArrowRight
         case "Icons.Outlined.KeyboardArrowUp": return Icons.Outlined.KeyboardArrowUp
