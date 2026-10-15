@@ -12,6 +12,7 @@ import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import skip.model.StateTracking
 #endif
 
 // SKIP @bridge
@@ -34,7 +35,15 @@ public struct GeometryReader : View, Renderable {
                 // Constructing the proxy must not read its frame or safe area. The content decides
                 // which properties it needs, including across the native Swift bridge.
                 let proxy = GeometryProxy(geometry: geometry, density: LocalDensity.current)
-                content(proxy).Compose(context.content())
+                // The content is made as a body is (Flat-Six patch): an observable made with it — a view's @State
+                // initial value, made anew each time — starts tracking once the content is made, as StateTracking.register
+                // has one a body makes do. Tracked at once, its own init's writes invalidated this reader, which made the
+                // content again and the observable with it, every frame (a root view whose tabs each make an observable
+                // model)
+                StateTracking.pushBody()
+                let view = content(proxy)
+                StateTracking.popBody()
+                view.Compose(context.content())
             }
         }
     }

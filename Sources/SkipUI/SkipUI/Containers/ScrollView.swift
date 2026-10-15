@@ -25,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import skip.model.StateTracking
 #elseif canImport(CoreGraphics)
 import struct CoreGraphics.CGFloat
 import struct CoreGraphics.CGRect
@@ -207,7 +208,11 @@ public struct ScrollViewReader : View, Renderable {
             }
         })
         PreferenceValues.shared.collectPreferences([scrollToIDCollector]) {
-            content(scrollProxy).Compose(context)
+            // The content is made as a body is, as GeometryReader's (Flat-Six patch)
+            StateTracking.pushBody()
+            let view = content(scrollProxy)
+            StateTracking.popBody()
+            view.Compose(context)
         }
     }
     #else
