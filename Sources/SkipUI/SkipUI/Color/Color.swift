@@ -207,8 +207,10 @@ public struct Color: ShapeStyle, Renderable, Hashable {
     public static let _background = background
 
     /// Matches Android's default bottom bar color.
+    /// The colour scheme's container role, which an app can set, rather than its surface tinted for elevation, which can
+    /// only be lighter than the surface (Flat-Six patch): iOS's grouped ground is darker than its cells in the dark.
     static let systemBarBackground: Color = Color(colorImpl: {
-        MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+        MaterialTheme.colorScheme.surfaceContainer
     })
 
     /// Use for overlays like alerts and action sheets.
