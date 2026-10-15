@@ -365,7 +365,11 @@ public struct NavigationStack : View, Renderable {
         let estimatedTopBarHeight = isInlineTitleDisplayMode ? estimatedCollapsedTopBarHeight : estimatedExpandedTopBarHeight
         let safeAreaTopPx = arguments.safeArea?.safeBoundsPx.top ?? Float(0.0)
         let hasAbsoluteTopSystemBar = arguments.safeArea?.absoluteSystemBarEdges.contains(.top) == true
-        let estimatedTopBarBottomPx = shouldReserveInitialTopBarSpace ? with(density) { safeAreaTopPx + estimatedTopBarHeight.toPx() } : Float(0.0)
+        // The bar's own top inset (Flat-Six patch): where it draws the status bar's (at the screen's top system bar,
+        // Material's window insets), the window's — which a container ignoring the safe area had taken out of the safe
+        // area: the bar ended at 142 + 115 px while its content was told 115, and slid 27 px down
+        let topBarInsetPx = hasAbsoluteTopSystemBar ? max(safeAreaTopPx, Float(TopAppBarDefaults.windowInsets.getTop(density))) : safeAreaTopPx
+        let estimatedTopBarBottomPx = shouldReserveInitialTopBarSpace ? with(density) { topBarInsetPx + estimatedTopBarHeight.toPx() } : Float(0.0)
         let estimatedTopBarBottomInPresentationPx = max(Float(0.0), estimatedTopBarBottomPx - presentationTopPx)
         let topBarBottomPx = remember { mutableStateOf(estimatedTopBarBottomInPresentationPx) }
         let measuredTopBarIsInline = remember { mutableStateOf(isInlineTitleDisplayMode) }
@@ -770,7 +774,7 @@ public struct NavigationStack : View, Renderable {
                         let localTopBarBottomPx = max(Float(0.0), effectiveTopBarBottomPx - (arguments.safeArea?.presentationBoundsPx.top ?? Float(0.0)))
                         topBarBottomDp = with(density) { localTopBarBottomPx.toDp() }
                     } else {
-                        let localSafeAreaTopDp = with(density) { max(Float(0.0), safeAreaTopPx - presentationTopPx).toDp() }
+                        let localSafeAreaTopDp = with(density) { max(Float(0.0), topBarInsetPx - presentationTopPx).toDp() }
                         let topBarHeightDp = estimatedCollapsedTopBarHeight + ((estimatedExpandedTopBarHeight - estimatedCollapsedTopBarHeight) * Float(1.0 - scrollBehavior.state.collapsedFraction))
                         topBarBottomDp = localSafeAreaTopDp + topBarHeightDp
                     }
