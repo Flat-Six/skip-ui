@@ -19,6 +19,7 @@ import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -206,6 +207,7 @@ public final class List : View, Renderable {
         // The list's first content past any empty view — an `if` whose condition is false (Flat-Six patch): SwiftUI
         // takes the section after it for the top one, where Skip let the empty view stand first
         let leadingRenderable = renderables.firstOrNull({ !$0.isSwiftUIEmptyView })
+        let leadingSection = leadingRenderable?.strip() as? LazySectionHeader   // its modifiers aside
 
         var modifier = context.modifier
         if styling.style != .plain {
@@ -293,14 +295,24 @@ public final class List : View, Renderable {
 
         // Under a large title a header-less first section starts close under the bar, as iOS's does: no top inset of the
         // list's own, and its empty header taken as the top one (Flat-Six patch)
-        let closeUnderTitle = EnvironmentValues.shared._isUnderLargeTitle == true && (leadingRenderable as? LazySectionHeader)?.content.size == 0
+        let closeUnderTitle = EnvironmentValues.shared._isUnderLargeTitle == true && leadingSection?.content.size == 0
         // Combine contentPadding with contentMargins additively
         var contentPadding = EnvironmentValues.shared._contentPadding.asPaddingValues()
         var hasTopContentMargin = false
+        // A grouped list that leads with a section takes a top margin into that section, as iOS's (Flat-Six patch):
+        // between its header and its rows, the header where it stands without one; a header-less section starts flush at
+        // the margin. Out of the list's padding, then.
+        var topSectionMargin = 0.dp
         if let contentMargins = EnvironmentValues.shared._contentMargins?.asComposePaddingValues(for: .automatic) {
             contentPadding = contentPadding.adding(contentMargins)
             hasTopContentMargin = contentMargins.calculateTopPadding() > 0.dp
+            if hasTopContentMargin && styling.style != ListStyle.plain && leadingSection != nil {
+                topSectionMargin = contentMargins.calculateTopPadding()
+                let insets = contentPadding.asEdgeInsets()
+                contentPadding = PaddingValues(start: insets.leading.dp, top: insets.top.dp - topSectionMargin, end: insets.trailing.dp, bottom: insets.bottom.dp)
+            }
         }
+        let flushTop = closeUnderTitle || (topSectionMargin > 0.dp && leadingSection?.content.size == 0)
         let listRowSpacing = EnvironmentValues.shared._listRowSpacing
         let listVerticalArrangement = listRowSpacing != nil ? Arrangement.spacedBy(listRowSpacing!.dp) : Arrangement.Top
         LazyColumn(state: reorderableState.listState, modifier: modifier, contentPadding: contentPadding, verticalArrangement: listVerticalArrangement) {
@@ -449,13 +461,14 @@ public final class List : View, Renderable {
                     let currentSectionIndex = sectionIndex
                     let sectionKey = Self.sectionKey(for: sectionIdentity, fallbackIndex: currentSectionIndex)
                     let headerRenderables = content.size == 0 ? listOf(EmptyView()) : content
-                    let firstRenderable = (leadingRenderable as? LazySectionHeader)?.content.firstOrNull()
+                    let firstRenderable = leadingSection?.content.firstOrNull()
                     // The list's first section is the top one where it has a header, by order (Flat-Six patch): the
                     // identity check never matched in Fuse mode, where the header's content reaches here as other objects
                     // than the list's first item holds, so every first header took a lower one's gap. A header-less first
                     // section keeps that gap, about iOS's, except flush under a large title.
-                    let isTop = (currentSectionIndex == 0 && leadingRenderable is LazySectionHeader && (content.size > 0 || closeUnderTitle)) || firstRenderable === headerRenderables.firstOrNull()
-                    let isFlush = closeUnderTitle && currentSectionIndex == 0
+                    let isTop = (currentSectionIndex == 0 && leadingSection != nil && (content.size > 0 || flushTop)) || firstRenderable === headerRenderables.firstOrNull()
+                    let isFlush = flushTop && currentSectionIndex == 0
+                    let marginBelow = currentSectionIndex == 0 && isTop && !isFlush ? topSectionMargin : 0.dp
                     var renderedCount = 0
                     for renderableIndex in 0..<headerRenderables.size {
                         let renderable = headerRenderables[renderableIndex]
@@ -486,7 +499,7 @@ public final class List : View, Renderable {
                                 } else {
                                     itemModifier = Modifier.animateItem(fadeInSpec: nil, fadeOutSpec: nil)
                                 }
-                                RenderSectionHeader(content: renderable, context: itemContext, modifier: itemModifier, styling: styling, isTop: isTop, isFlush: isFlush)
+                                RenderSectionHeader(content: renderable, context: itemContext, modifier: itemModifier, styling: styling, isTop: isTop, isFlush: isFlush, marginBelow: marginBelow)
                             }
                         }
                         renderedCount = renderedCount + 1
@@ -549,9 +562,9 @@ public final class List : View, Renderable {
                 }
             }
             if hasHeader {
-                let hasTopSection = leadingRenderable is LazySectionHeader
+                let hasTopSection = leadingSection != nil
                 item {
-                    RenderHeader(styling: styling, safeAreaHeight: isSearchable ? 0.dp : arguments.headerSafeAreaHeight, hasTopSection: hasTopSection, hasTopMargin: hasTopContentMargin || closeUnderTitle)
+                    RenderHeader(styling: styling, safeAreaHeight: (isSearchable ? 0.dp : arguments.headerSafeAreaHeight) + (flushTop ? topSectionMargin : 0.dp), hasTopSection: hasTopSection, hasTopMargin: (hasTopContentMargin && topSectionMargin == 0.dp) || flushTop)
                 }
             }
             for renderable in renderables {
@@ -1287,7 +1300,7 @@ public final class List : View, Renderable {
         }
     }
 
-    @Composable private func RenderSectionHeader(content: Renderable, context: ComposeContext, modifier: Modifier = Modifier, styling: ListStyling, isTop: Bool, isFlush: Bool = false) {
+    @Composable private func RenderSectionHeader(content: Renderable, context: ComposeContext, modifier: Modifier = Modifier, styling: ListStyling, isTop: Bool, isFlush: Bool = false, marginBelow: Dp = 0.dp) {
         let backgroundColor = BackgroundColor(styling: styling, isItem: false)
         if isFlush && styling.style != .plain {
             // No header at all: only the section's top corners, drawn over its first row (Flat-Six patch)
@@ -1302,7 +1315,7 @@ public final class List : View, Renderable {
             .then(context.modifier)
         var contentModifier = Modifier.fillMaxWidth()
         if isTop && styling.style != .plain {
-            contentModifier = contentModifier.padding(start: Self.horizontalItemInset.dp, top: 0.dp, end: Self.horizontalItemInset.dp, bottom: Self.verticalItemInset.dp)
+            contentModifier = contentModifier.padding(start: Self.horizontalItemInset.dp, top: 0.dp, end: Self.horizontalItemInset.dp, bottom: Self.verticalItemInset.dp + marginBelow)
         } else {
             contentModifier = contentModifier.padding(horizontal: Self.horizontalItemInset.dp, vertical: Self.verticalItemInset.dp)
         }
