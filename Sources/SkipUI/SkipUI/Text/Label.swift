@@ -76,7 +76,9 @@ public struct Label : View, Renderable {
                 imageColor = imageColor.opacity(Double(ContentAlpha.disabled))
             }
         } else if placement.contains(ViewPlacement.listItem) {
-            imageColor = EnvironmentValues.shared._foregroundStyle as? Color ?? EnvironmentValues.shared._listItemTint ?? Color.accentColor
+            // the environment's tint before the accent, as SwiftUI tints a list row's icon (Flat-Six patch: Skip took the
+            // accent alone, Material's primary — on Android 12 and up the wallpaper's colour)
+            imageColor = EnvironmentValues.shared._foregroundStyle as? Color ?? EnvironmentValues.shared._listItemTint ?? EnvironmentValues.shared._tint ?? Color.accentColor
             titlePadding = 6.0
         }
         switch style {
