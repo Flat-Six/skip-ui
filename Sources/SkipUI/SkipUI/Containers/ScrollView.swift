@@ -156,13 +156,13 @@ public struct ScrollView : View, Renderable {
 // SKIP @bridge
 public struct ScrollViewProxy {
     #if SKIP
-    let scrollToID: (Any) -> Void
+    let scrollToID: (Any, UnitPoint?) -> Void
     #endif
 
     public func scrollTo(_ id: Any, anchor: UnitPoint? = nil) {
         #if SKIP
-        // Warning: anchor is currently ignored
-        scrollToID(id)
+        // the anchor is a list's only (Flat-Six patch); elsewhere still ignored
+        scrollToID(id, anchor)
         #endif
     }
 
@@ -191,7 +191,17 @@ public struct ScrollViewReader : View, Renderable {
     @Composable override func Render(context: ComposeContext) {
         let scrollToID = rememberSaveable(stateSaver: context.stateSaver as! Saver<Preference<ScrollToIDAction>, Any>) { mutableStateOf(Preference<ScrollToIDAction>(key: ScrollToIDPreferenceKey.self)) }
         let scrollToIDCollector = PreferenceCollector<ScrollToIDAction>(key: ScrollToIDPreferenceKey.self, state: scrollToID)
-        let scrollProxy = ScrollViewProxy(scrollToID: scrollToID.value.reduced.action)
+        // The scroll view's action as it is when the proxy is called, as SwiftUI's proxy reaches it (Flat-Six patch):
+        // a proxy held from the first composition — by a task started on appear — kept the empty action of before the
+        // scroll view contributed its own, and scrolled nothing
+        let scrollProxy = ScrollViewProxy(scrollToID: { id, anchor in
+            let action = scrollToID.value.reduced
+            if let anchoredAction = action.anchoredAction {
+                anchoredAction(id, anchor)
+            } else {
+                action.action(id)
+            }
+        })
         PreferenceValues.shared.collectPreferences([scrollToIDCollector]) {
             content(scrollProxy).Compose(context)
         }
@@ -236,6 +246,14 @@ struct ScrollToIDAction : Equatable {
     // recompose when the remembered state might change, the preference action is updated
     let key: Any?
     let action: (Any) -> Void
+    /// The action with the scroll's anchor, where the scroll view places by it (Flat-Six patch: a list).
+    let anchoredAction: ((Any, UnitPoint?) -> Void)?
+
+    init(key: Any?, anchoredAction: ((Any, UnitPoint?) -> Void)? = nil, action: @escaping (Any) -> Void) {
+        self.key = key
+        self.action = action
+        self.anchoredAction = anchoredAction
+    }
 
     static func ==(lhs: ScrollToIDAction, rhs: ScrollToIDAction) -> Bool {
         return lhs.key == rhs.key

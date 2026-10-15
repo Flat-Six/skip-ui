@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.GenericShape
@@ -243,7 +244,25 @@ public final class List : View, Renderable {
                 reorderableState.listState.animateScrollToItem(0)
             }
         })
-        let scrollToID = ScrollToIDAction(key: reorderableState.listState) { id in
+        let scrollToID = ScrollToIDAction(key: reorderableState.listState, anchoredAction: { id, anchor in
+            // The row placed by the anchor, as SwiftUI places it — the anchor's point in the row on the same point of
+            // the visible list (Flat-Six patch; Skip took every row to the top): the row to the top, then down by
+            // its share of the room left beside it
+            guard let itemIndex = itemCollector.value.index(for: id) else {
+                return
+            }
+            coroutineScope.launch {
+                let listState = reorderableState.listState
+                listState.scrollToItem(itemIndex)
+                guard let anchor, anchor.y > 0.0 else {
+                    return
+                }
+                let layoutInfo = listState.layoutInfo
+                let viewport = layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding - layoutInfo.viewportStartOffset - layoutInfo.beforeContentPadding
+                let itemSize = layoutInfo.visibleItemsInfo.firstOrNull({ $0.index == itemIndex })?.size ?? 0
+                listState.scrollBy(Float(-anchor.y * Double(max(0, viewport - itemSize))))
+            }
+        }, action: { id in
             if let itemIndex = itemCollector.value.index(for: id) {
                 coroutineScope.launch {
                     if Animation.isInWithAnimation {
@@ -253,7 +272,7 @@ public final class List : View, Renderable {
                     }
                 }
             }
-        }
+        })
         PreferenceValues.shared.contribute(context: context, key: ScrollToIDPreferenceKey.self, value: scrollToID)
         let isSystemBackground = styling.style != ListStyle.plain && styling.backgroundVisibility != Visibility.hidden
         // We contribute top bar preferences even without knowing we're safe area-adjacent for multiple reasons:
