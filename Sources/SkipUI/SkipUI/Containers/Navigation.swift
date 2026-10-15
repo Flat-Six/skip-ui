@@ -306,7 +306,15 @@ public struct NavigationStack : View, Renderable {
         // content for each bar) prevents it from updating properly on recompose
         let toolbarContentReduced = toolbarContent.value.reduced
         let toolbarItems = ToolbarItems(content: toolbarContentReduced.content ?? [])
-        let (titleMenu, topLeadingItems, topTrailingItems, bottomItems, keyboardItems) = toolbarItems.Evaluate(context: context)
+        let placedItems = toolbarItems.Evaluate(context: context)
+        let titleMenu = placedItems.titleMenu
+        // a principal item in the title's place, as iOS's (Flat-Six patch: Skip put it after the leading items, at the
+        // bar's start)
+        let principalItem = placedItems.principal
+        let topLeadingItems = placedItems.topLeading
+        let topTrailingItems = placedItems.topTrailing
+        let bottomItems = placedItems.bottom
+        let keyboardItems = placedItems.keyboard
 
         let showTopBar: Bool
         switch topBarPreferences?.visibility ?? Visibility.automatic {
@@ -315,7 +323,7 @@ public struct NavigationStack : View, Renderable {
         case .visible:
             showTopBar = true
         case .automatic:
-            showTopBar = !arguments.isRoot || hasTitle || topLeadingItems.size > 0 || topTrailingItems.size > 0
+            showTopBar = !arguments.isRoot || hasTitle || principalItem != nil || topLeadingItems.size > 0 || topTrailingItems.size > 0
         }
         let searchFieldPadding = 16.dp
         let density = LocalDensity.current
@@ -475,7 +483,9 @@ public struct NavigationStack : View, Renderable {
                             titleContentColor: MaterialTheme.colorScheme.onSurface
                         )
                         let topBarTitle: @Composable () -> Void = {
-                            if let titleMenu {
+                            if let principalItem {
+                                principalItem.Render(context: context)
+                            } else if let titleMenu {
                                 let menuModifier = Modifier.clickable(interactionSource: interactionSource, indication: nil, onClick: {
                                     titleMenu.toggleMenu()
                                 })
