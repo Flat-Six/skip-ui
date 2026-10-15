@@ -429,9 +429,18 @@ extension View {
         #endif
     }
 
-    @available(*, unavailable)
-    public func controlSize(_ controlSize: ControlSize) -> some View {
+    /// The control size, for the bordered buttons in the view (Flat-Six patch: unavailable before).
+    public func controlSize(_ controlSize: ControlSize) -> any View {
+        #if SKIP
+        return environment(\._controlSize, controlSize, affectsEvaluate: false)
+        #else
         return self
+        #endif
+    }
+
+    // SKIP @bridge
+    public func controlSize(bridgedRawValue: Int) -> any View {
+        return controlSize(ControlSize(rawValue: bridgedRawValue) ?? ControlSize.regular)
     }
 
     @available(*, unavailable)

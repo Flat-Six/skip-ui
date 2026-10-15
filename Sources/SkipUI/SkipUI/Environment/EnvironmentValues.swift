@@ -971,6 +971,12 @@ extension EnvironmentValues {
         set { setBuiltinValue(key: "_textFieldStyle", value: newValue, defaultValue: { nil }) }
     }
 
+    /// The control size `controlSize(_:)` sets (Flat-Six patch): the bordered buttons' height, padding and type.
+    var _controlSize: ControlSize? {
+        get { builtinValue(key: "_controlSize", defaultValue: { nil }) as! ControlSize? }
+        set { setBuiltinValue(key: "_controlSize", value: newValue, defaultValue: { nil }) }
+    }
+
     var _tint: Color? {
         get { builtinValue(key: "_tint", defaultValue: { nil }) as! Color? }
         set { setBuiltinValue(key: "_tint", value: newValue, defaultValue: { nil }) }

@@ -8,6 +8,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.ContentAlpha
 import androidx.compose.material.ripple.RippleAlpha
@@ -129,6 +132,22 @@ public struct Button : View, Renderable {
         }
     }
 
+    /// iOS's bordered button by control size (Flat-Six patch): its height, padding and type — Material's buttons
+    /// are 40 dp high and 58 wide at the least, padded 24 a side. Material holds those least sizes only where nothing
+    /// else asks for one, so the button asks for a width of 1 at the least and its height outright.
+    static func iosBorderedSizing(_ size: ControlSize?) -> (height: Dp, padding: PaddingValues, font: Font) {
+        switch size ?? ControlSize.regular {
+        case ControlSize.mini:
+            return (22.dp, PaddingValues(horizontal: 7.dp, vertical: 0.dp), Font.caption)
+        case ControlSize.small:
+            return (28.dp, PaddingValues(horizontal: 10.dp, vertical: 0.dp), Font.subheadline)
+        case ControlSize.large, ControlSize.extraLarge:
+            return (50.dp, PaddingValues(horizontal: 20.dp, vertical: 0.dp), Font.body)
+        default:
+            return (34.dp, PaddingValues(horizontal: 12.dp, vertical: 0.dp), Font.body)
+        }
+    }
+
     /// Render a button in the current style.
     @Composable static func RenderButton(label: View, context: ComposeContext, role: ButtonRole? = nil, isEnabled: Bool = EnvironmentValues.shared.isEnabled, action: () -> Void) {
         let buttonStyle = EnvironmentValues.shared._buttonStyle
@@ -145,12 +164,18 @@ public struct Button : View, Renderable {
                     colors = ButtonDefaults.filledTonalButtonColors()
                 }
                 var options = Material3ButtonOptions(onClick: action, modifier: modifier, enabled: isEnabled && isHitTestingEnabled, shape: ButtonDefaults.filledTonalShape, colors: colors, elevation: ButtonDefaults.filledTonalButtonElevation())
+                let sizing = Self.iosBorderedSizing(EnvironmentValues.shared._controlSize)
+                options = options.copy(modifier: options.modifier.widthIn(min: 1.dp).height(sizing.height), contentPadding: sizing.padding)
                 if let updateOptions = EnvironmentValues.shared._material3Button {
                     options = updateOptions(options)
                 }
                 let placement = EnvironmentValues.shared._placement
                 let contentContext = context.content()
+                let hasFont = EnvironmentValues.shared.font != nil
                 EnvironmentValues.shared.setValues {
+                    if !hasFont {
+                        $0.setfont(sizing.font)
+                    }
                     if let tint {
                         let foregroundStyle = isEnabled ? tint : tint.opacity(Double(ContentAlpha.disabled))
                         $0.set_foregroundStyle(foregroundStyle)
@@ -183,12 +208,18 @@ public struct Button : View, Renderable {
                     colors = ButtonDefaults.buttonColors()
                 }
                 var options = Material3ButtonOptions(onClick: action, modifier: modifier, enabled: isEnabled && isHitTestingEnabled, shape: ButtonDefaults.shape, colors: colors, elevation: ButtonDefaults.buttonElevation())
+                let sizing = Self.iosBorderedSizing(EnvironmentValues.shared._controlSize)
+                options = options.copy(modifier: options.modifier.widthIn(min: 1.dp).height(sizing.height), contentPadding: sizing.padding)
                 if let updateOptions = EnvironmentValues.shared._material3Button {
                     options = updateOptions(options)
                 }
                 let placement = EnvironmentValues.shared._placement
                 let contentContext = context.content()
+                let hasFont = EnvironmentValues.shared.font != nil
                 EnvironmentValues.shared.setValues {
+                    if !hasFont {
+                        $0.setfont(sizing.font)
+                    }
                     $0.set_placement(placement.union(ViewPlacement.systemTextColor).union(ViewPlacement.onPrimaryColor))
                     return ComposeResult.ok
                 } in: {
