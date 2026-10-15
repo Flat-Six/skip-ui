@@ -8,6 +8,10 @@ import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -55,6 +59,12 @@ public struct LazyVGrid: View, Renderable {
 
     #if SKIP
     @Composable override func Render(context: ComposeContext) {
+        // In a list's row the grid cannot scroll on its own: drawn whole, as SwiftUI draws a grid in a row (Flat-Six
+        // patch; Skip drew nothing there)
+        if EnvironmentValues.shared._placement.contains(ViewPlacement.listItem) && EnvironmentValues.shared._scrollAxes.contains(Axis.Set.vertical) {
+            RenderUnscrolled(context: context)
+            return
+        }
         // Let any parent scroll view know about our builtin scrolling. If there is a parent scroll
         // view that didn't already know, abort and wait for recompose to avoid fatal nested scroll error
         PreferenceValues.shared.contribute(context: context, key: BuiltinScrollAxisSetPreferenceKey.self, value: Axis.Set.vertical)
@@ -212,6 +222,47 @@ public struct LazyVGrid: View, Renderable {
                         }
                     }
                     }
+                }
+            }
+        }
+    }
+    /// The grid whole, rows of cells without lazy scrolling of its own, for a list's row (Flat-Six patch): the
+    /// columns from the first item's size as SwiftUI sizes them — adaptive as many as fit at the minimum, each its
+    /// share up to the maximum; fixed at its width; flexible equal shares — the rows spaced by the grid's spacing.
+    @Composable private func RenderUnscrolled(context: ComposeContext) {
+        let renderables = content.Evaluate(context: context, options: 0)
+        let size = columns.first?.size ?? GridItem.Size.flexible()
+        let horizontalSpacing = columns.first?.spacing ?? 8.0
+        let verticalSpacing = spacing ?? 8.0
+        let cellAlignment = columns.first?.alignment?.asComposeAlignment() ?? androidx.compose.ui.Alignment.Center
+        let contentContext = context.content()
+        BoxWithConstraints(modifier: context.modifier.fillMaxWidth()) {
+            let width = Double(maxWidth.value)
+            var count = max(1, columns.count)
+            var cellWidth = (width - horizontalSpacing * Double(count - 1)) / Double(count)
+            switch size {
+            case .adaptive(let minimum, let maximum):
+                count = max(1, Int((width + horizontalSpacing) / (minimum + horizontalSpacing)))
+                cellWidth = min(maximum, (width - horizontalSpacing * Double(count - 1)) / Double(count))
+            case .fixed(let fixedSize):
+                cellWidth = fixedSize
+            default:
+                break
+            }
+            Column(verticalArrangement: Arrangement.spacedBy(verticalSpacing.dp), horizontalAlignment: alignment.asComposeAlignment()) {
+                var index = 0
+                while index < renderables.size {
+                    let rowStart = index
+                    Row(horizontalArrangement: Arrangement.spacedBy(horizontalSpacing.dp)) {
+                        for column in 0..<count {
+                            if rowStart + column < renderables.size {
+                                Box(modifier: Modifier.width(cellWidth.dp), contentAlignment: cellAlignment) {
+                                    renderables[rowStart + column].Render(context: contentContext)
+                                }
+                            }
+                        }
+                    }
+                    index += count
                 }
             }
         }
