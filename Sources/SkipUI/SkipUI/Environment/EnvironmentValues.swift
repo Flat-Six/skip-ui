@@ -753,6 +753,12 @@ extension EnvironmentValues {
         set { setBuiltinValue(key: "_listItemTextInputFocused", value: newValue, defaultValue: { nil }) }
     }
 
+    /// A list row's place in its section (Flat-Six patch): 1 its first row, 2 its last, 3 both, 0 neither.
+    var _listRowSectionEdges: Int? {
+        get { builtinValue(key: "_listRowSectionEdges", defaultValue: { nil }) as! Int? }
+        set { setBuiltinValue(key: "_listRowSectionEdges", value: newValue, defaultValue: { nil }) }
+    }
+
     var _keyboardOptions: KeyboardOptions? {
         get { builtinValue(key: "_keyboardOptions", defaultValue: { nil }) as! KeyboardOptions? }
         set { setBuiltinValue(key: "_keyboardOptions", value: newValue, defaultValue: { nil }) }

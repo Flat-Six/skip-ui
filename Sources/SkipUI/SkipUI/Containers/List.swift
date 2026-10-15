@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.GenericShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.PullRefreshState
@@ -380,6 +381,13 @@ public final class List : View, Renderable {
             }
 
             var sectionIndex = -1
+            // Each section's first and last rows, in the order the rows are emitted (Flat-Six patch): a row learns
+            // its place when it is composed, after the whole list has been collected
+            var emitted = 0
+            var lastInSection = -1
+            var firstPending = true
+            var firstEmissions: Set<Int> = []
+            var lastEmissions: Set<Int> = []
             var startItemIndex = hasHeader ? 1 : 0 // Header inset
             if isSearchable {
                 startItemIndex += 1 // Search field
@@ -388,13 +396,19 @@ public final class List : View, Renderable {
             itemCollector.value.initialize(
                 startItemIndex: startItemIndex,
                 item: { renderable, level in
+                    let emission = emitted
+                    emitted += 1
+                    if firstPending { firstEmissions.insert(emission); firstPending = false }
+                    lastInSection = emission
                     item(key: itemKey(renderable, level)) {
                         let textInputFocused = remember { mutableStateOf(false) }
                         let suppressTextInputAnimation = remember { mutableStateOf(false) }
                         updateTextInputAnimationSuppression(textInputFocused, suppressTextInputAnimation)
                         let itemModifier: Modifier = shouldAnimateItems(suppressTextInputAnimation.value) ? Modifier.animateItem() : Modifier
+                        let edges = (firstEmissions.contains(emission) ? 1 : 0) + (lastEmissions.contains(emission) ? 2 : 0)
                         EnvironmentValues.shared.setValues {
                             $0.set_listItemTextInputFocused(textInputFocused)
+                            $0.set_listRowSectionEdges(edges)
                             return ComposeResult.ok
                         } in: {
                             RenderItem(content: renderable, level: level, context: itemContext, modifier: itemModifier, styling: styling)
@@ -403,8 +417,13 @@ public final class List : View, Renderable {
                 },
                 indexedItems: { range, identifier, offset, onDelete, onMove, level, factory in
                     let count = range.endExclusive - range.start
+                    let emission = emitted
+                    emitted += 1
+                    if firstPending && count > 0 { firstEmissions.insert(emission); firstPending = false }
+                    if count > 0 { lastInSection = emission }
                     let key: ((Int) -> String)? = identifier == nil ? nil : { composeBundleString(for: identifier!(range.start + itemCollector.value.remapIndex($0, from: offset))) }
                     items(count: count, key: key) { index in
+                        let edges = (index == 0 && firstEmissions.contains(emission) ? 1 : 0) + (index == count - 1 && lastEmissions.contains(emission) ? 2 : 0)
                         let keyValue = key?(index) // Key closure already remaps index
                         let index = itemCollector.value.remapIndex(index, from: offset)
                         let textInputFocused = remember { mutableStateOf(false) }
@@ -414,6 +433,7 @@ public final class List : View, Renderable {
                         let renderable = factory(index + range.start, itemContext)
                         EnvironmentValues.shared.setValues {
                             $0.set_listItemTextInputFocused(textInputFocused)
+                            $0.set_listRowSectionEdges(edges)
                             return ComposeResult.ok
                         } in: {
                             RenderEditableItem(content: renderable, level: level, context: itemContext, modifier: itemModifier, styling: styling, key: keyValue, index: index, onDelete: onDelete, onMove: onMove, reorderableState: reorderableState, activeSwipeKey: activeSwipeKey)
@@ -421,8 +441,14 @@ public final class List : View, Renderable {
                     }
                 },
                 objectItems: { objects, identifier, offset, onDelete, onMove, level, factory in
+                    let count = objects.count
+                    let emission = emitted
+                    emitted += 1
+                    if firstPending && count > 0 { firstEmissions.insert(emission); firstPending = false }
+                    if count > 0 { lastInSection = emission }
                     let key: (Int) -> String = { composeBundleString(for: identifier(objects[itemCollector.value.remapIndex($0, from: offset)])) }
                     items(count: objects.count, key: key) { index in
+                        let edges = (index == 0 && firstEmissions.contains(emission) ? 1 : 0) + (index == count - 1 && lastEmissions.contains(emission) ? 2 : 0)
                         let keyValue = key(index) // Key closure already remaps index
                         let index = itemCollector.value.remapIndex(index, from: offset)
                         let textInputFocused = remember { mutableStateOf(false) }
@@ -432,6 +458,7 @@ public final class List : View, Renderable {
                         let renderable = factory(objects[index], itemContext)
                         EnvironmentValues.shared.setValues {
                             $0.set_listItemTextInputFocused(textInputFocused)
+                            $0.set_listRowSectionEdges(edges)
                             return ComposeResult.ok
                         } in: {
                             RenderEditableItem(content: renderable, level: level, context: itemContext, modifier: itemModifier, styling: styling, key: keyValue, index: index, onDelete: onDelete, onMove: onMove, reorderableState: reorderableState, activeSwipeKey: activeSwipeKey)
@@ -439,8 +466,14 @@ public final class List : View, Renderable {
                     }
                 },
                 objectBindingItems: { objectsBinding, identifier, offset, editActions, onDelete, onMove, level, factory in
+                    let count = objectsBinding.wrappedValue.count
+                    let emission = emitted
+                    emitted += 1
+                    if firstPending && count > 0 { firstEmissions.insert(emission); firstPending = false }
+                    if count > 0 { lastInSection = emission }
                     let key: (Int) -> String = { composeBundleString(for: identifier(objectsBinding.wrappedValue[itemCollector.value.remapIndex($0, from: offset)])) }
                     items(count: objectsBinding.wrappedValue.count, key: key) { index in
+                        let edges = (index == 0 && firstEmissions.contains(emission) ? 1 : 0) + (index == count - 1 && lastEmissions.contains(emission) ? 2 : 0)
                         let keyValue = key(index) // Key closure already remaps index
                         let index = itemCollector.value.remapIndex(index, from: offset)
                         let textInputFocused = remember { mutableStateOf(false) }
@@ -450,6 +483,7 @@ public final class List : View, Renderable {
                         let renderable = factory(objectsBinding, index, itemContext)
                         EnvironmentValues.shared.setValues {
                             $0.set_listItemTextInputFocused(textInputFocused)
+                            $0.set_listRowSectionEdges(edges)
                             return ComposeResult.ok
                         } in: {
                             RenderEditableItem(content: renderable, level: level, context: itemContext, modifier: itemModifier, styling: styling, objectsBinding: objectsBinding, key: keyValue, index: index, editActions: editActions, onDelete: onDelete, onMove: onMove, reorderableState: reorderableState, activeSwipeKey: activeSwipeKey)
@@ -457,6 +491,8 @@ public final class List : View, Renderable {
                     }
                 },
                 sectionHeader: { content, sectionIdentity in
+                    firstPending = true
+                    lastInSection = -1
                     sectionIndex += 1
                     let currentSectionIndex = sectionIndex
                     let sectionKey = Self.sectionKey(for: sectionIdentity, fallbackIndex: currentSectionIndex)
@@ -507,6 +543,8 @@ public final class List : View, Renderable {
                     return renderedCount
                 },
                 sectionFooter: { content, sectionIdentity, sectionItemCount in
+                    if lastInSection >= 0 { lastEmissions.insert(lastInSection) }
+                    lastInSection = -1
                     let currentSectionIndex = sectionIndex
                     let sectionKey = Self.sectionKey(for: sectionIdentity, fallbackIndex: currentSectionIndex)
                     let footerRenderables = content.size == 0 ? listOf(EmptyView()) : content
@@ -580,6 +618,7 @@ public final class List : View, Renderable {
                     itemCollector.value.item(renderable, 0)
                 }
             }
+            if lastInSection >= 0 { lastEmissions.insert(lastInSection) }
 
             sectionChromeAnimationState.sectionBodyItemCounts = currentSectionBodyItemCounts
 
@@ -731,6 +770,13 @@ public final class List : View, Renderable {
         if listItemModifier?.background == nil {
             itemModifier = itemModifier.background(BackgroundColor(styling: styling.withStyle(ListStyle.plain), isItem: isItem))
         }
+        // Where a grouped list's ground is hidden, its sections' rounded corners are their rows', clipped, as SwiftUI's
+        // (Flat-Six patch): Skip paints the corners in the ground, clear there, so the cards were square and their
+        // last rows' dividers showed
+        let edges = isItem ? Self.sectionEdges(styling: styling) : 0
+        if edges > 0 {
+            itemModifier = Modifier.clip(Self.sectionCornerShape(edges)).then(itemModifier)
+        }
 
         // The given modifiers include elevation shadow for dragging, etc that need to go before the others
         let containerContext = context.content(modifier: modifier.then(itemModifier).then(context.modifier))
@@ -751,7 +797,7 @@ public final class List : View, Renderable {
                 } in: {
                     Self.RenderItemContent(item: itemRenderable, context: contentContext, modifier: contentModifier)
                 }
-                if listItemModifier?.separator != Visibility.hidden {
+                if listItemModifier?.separator != Visibility.hidden && edges < 2 {
                     Self.RenderSeparator(level: level)
                 }
             }
@@ -764,6 +810,23 @@ public final class List : View, Renderable {
         } else {
             renderContainer(containerContext)
         }
+    }
+
+    /// Where a grouped list's ground is hidden, the row's place in its section: 1 its first row, 2 its last, 3 both, else 0
+    /// (Flat-Six patch).
+    @Composable private static func sectionEdges(styling: ListStyling) -> Int {
+        guard styling.style != ListStyle.plain && styling.backgroundVisibility == Visibility.hidden else {
+            return 0
+        }
+        return EnvironmentValues.shared._listRowSectionEdges ?? 0
+    }
+
+    /// A section's rounded corners on its first and last rows (Flat-Six patch).
+    private static func sectionCornerShape(_ edges: Int) -> RoundedCornerShape {
+        let radius = listSectionCornerRadius.dp
+        let top = edges != 2
+        let bottom = edges >= 2
+        return RoundedCornerShape(topStart: top ? radius : 0.dp, topEnd: top ? radius : 0.dp, bottomEnd: bottom ? radius : 0.dp, bottomStart: bottom ? radius : 0.dp)
     }
 
     @Composable private func RenderEditableItem(content: Renderable, level: Int, context: ComposeContext, modifier: Modifier, styling: ListStyling, objectsBinding: Binding<RandomAccessCollection<Any>>? = nil, key: String?, index: Int, editActions: EditActions = [], onDelete: ((IndexSet) -> Void)?, onMove: ((IndexSet, Int) -> Void)?, reorderableState: ReorderableLazyListState, activeSwipeKey: MutableState<String?>) {
@@ -832,9 +895,13 @@ public final class List : View, Renderable {
                 SwipeToDismissBox(state: dismissState, enableDismissFromEndToStart: true, enableDismissFromStartToEnd: false, modifier: $0, backgroundContent: {
                     /* Red background unconditional (destructive cue); icon only
                        if the trash vector resolves — force-unwrapping inside a LazyColumn item would crash measurement. */
-                    Box(modifier: Modifier.background(androidx.compose.ui.graphics.Color.Red).fillMaxSize(), contentAlignment: androidx.compose.ui.Alignment.CenterEnd) {
-                        if let trashVector = Image.composeImageVector(named: "trash") {
-                            Icon(imageVector: trashVector, contentDescription: "Delete", modifier = Modifier.padding(end: 24.dp), tint: androidx.compose.ui.graphics.Color.White)
+                    // Only while the row is swiped, as iOS's (Flat-Six patch): under every row at rest, it bled
+                    // through the antialiased edge of a section's clipped corner
+                    if dismissState.dismissDirection != SwipeToDismissBoxValue.Settled {
+                        Box(modifier: Modifier.background(androidx.compose.ui.graphics.Color.Red).fillMaxSize(), contentAlignment: androidx.compose.ui.Alignment.CenterEnd) {
+                            if let trashVector = Image.composeImageVector(named: "trash") {
+                                Icon(imageVector: trashVector, contentDescription: "Delete", modifier = Modifier.padding(end: 24.dp), tint: androidx.compose.ui.graphics.Color.White)
+                            }
                         }
                     }
                 }, content: {
@@ -847,10 +914,14 @@ public final class List : View, Renderable {
             }
         }
 
+        // A swipe's own background is clipped with its row where the row is a section's corner (Flat-Six patch): the
+        // delete swipe's red, drawn under every row, showed at the corners
+        let edges = Self.sectionEdges(styling: styling)
+        let swipeModifier = edges > 0 ? modifier.clip(Self.sectionCornerShape(edges)) : modifier
         if isMoveEnabled {
-            RenderReorderableItem(reorderableState: reorderableState, key: key, modifier: modifier, content: itemContent)
+            RenderReorderableItem(reorderableState: reorderableState, key: key, modifier: swipeModifier, content: itemContent)
         } else {
-            itemContent(modifier)
+            itemContent(swipeModifier)
         }
     }
 
