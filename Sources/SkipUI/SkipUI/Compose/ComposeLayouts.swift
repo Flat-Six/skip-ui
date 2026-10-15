@@ -188,30 +188,32 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
     // state to our output to ensure we aren't re-calling the target block when output hasn't changed
     let edgesState = remember { mutableStateOf(checkEdges) }
     let edges = edgesState.value
+    // Each expansion rounded as Compose rounds the padding it undoes, not truncated (Flat-Six patch): a bar's 257.5 px
+    // took 258 of padding and gave back 257, a pixel's line of what is behind at the screen's edge
     var expansionTop = 0
     if expandInto.contains(Edge.Set.top) && edges.contains(Edge.Set.top) {
-        expansionTop = Int(safeArea.safeBoundsPx.top - safeArea.presentationBoundsPx.top)
+        expansionTop = Int((safeArea.safeBoundsPx.top - safeArea.presentationBoundsPx.top).rounded())
     }
     var expansionBottom = 0
     if expandInto.contains(Edge.Set.bottom) && edges.contains(Edge.Set.bottom) {
-        expansionBottom = Int(safeArea.presentationBoundsPx.bottom - safeArea.safeBoundsPx.bottom)
+        expansionBottom = Int((safeArea.presentationBoundsPx.bottom - safeArea.safeBoundsPx.bottom).rounded())
     }
     var expansionLeft = 0
     var expansionRight = 0
     let isRTL = LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     if isRTL {
         if expandInto.contains(Edge.Set.leading) && edges.contains(Edge.Set.leading) {
-            expansionRight = Int(safeArea.presentationBoundsPx.right - safeArea.safeBoundsPx.right)
+            expansionRight = Int((safeArea.presentationBoundsPx.right - safeArea.safeBoundsPx.right).rounded())
         }
         if expandInto.contains(Edge.Set.trailing) && edges.contains(Edge.Set.trailing) {
-            expansionLeft = Int(safeArea.safeBoundsPx.left - safeArea.presentationBoundsPx.left)
+            expansionLeft = Int((safeArea.safeBoundsPx.left - safeArea.presentationBoundsPx.left).rounded())
         }
     } else {
         if expandInto.contains(Edge.Set.leading) && edges.contains(Edge.Set.leading) {
-            expansionLeft = Int(safeArea.safeBoundsPx.left - safeArea.presentationBoundsPx.left)
+            expansionLeft = Int((safeArea.safeBoundsPx.left - safeArea.presentationBoundsPx.left).rounded())
         }
         if expandInto.contains(Edge.Set.trailing) && edges.contains(Edge.Set.trailing) {
-            expansionRight = Int(safeArea.presentationBoundsPx.right - safeArea.safeBoundsPx.right)
+            expansionRight = Int((safeArea.presentationBoundsPx.right - safeArea.safeBoundsPx.right).rounded())
         }
     }
 
