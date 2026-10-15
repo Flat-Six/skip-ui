@@ -4,6 +4,12 @@
 import Foundation
 #if SKIP
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -222,6 +228,10 @@ public final class Picker<SelectionValue> : View, Renderable {
         guard style != PickerStyle.segmented else {
             return (false, nil)
         }
+        // An inline picker's options are rows of their own, each taking its own taps (Flat-Six patch)
+        if style == PickerStyle.inline {
+            return (true, nil)
+        }
         let action: () -> Void
         if style == .navigationLink {
             let navigator = LocalNavigator.current
@@ -237,23 +247,62 @@ public final class Picker<SelectionValue> : View, Renderable {
     @Composable override func RenderListItem(context: ComposeContext, modifiers: kotlin.collections.List<ModifierProtocol>) {
         ModifiedContent.RenderWithModifiers(modifiers, context: context) { context in
             let _ = selectionTrigger?.value
-            let (selected, tagged) = processPickerContent(content: content, selection: selection, context: context)
             let style = EnvironmentValues.shared._pickerStyle ?? PickerStyle.automatic
-            Row(modifier: context.modifier, verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
-                if !EnvironmentValues.shared._labelsHidden {
-                    Box(modifier: Modifier.padding(end: 8.dp).weight(Float(1.0))) {
-                        label.Compose(context: context)
+            if style == PickerStyle.inline {
+                RenderInlineOptions(context: context)
+            } else {
+                RenderMenuListItem(context: context, style: style)
+            }
+        }
+    }
+
+    /// iOS's inline picker in a list (Flat-Six patch), for the menu Skip drew: each option a row of its own, 44 dp
+    /// (the first and the last taking the item's own padding), the selected one checked in the tint, hairlines between.
+    @Composable private func RenderInlineOptions(context: ComposeContext) {
+        let (_, tagged) = processPickerContent(content: content, selection: selection, context: context, requireTaggedRenderables: true)
+        let tint = (EnvironmentValues.shared._tint ?? Color(colorImpl: { MaterialTheme.colorScheme.primary })).colorImpl()
+        let contentContext = context.content()
+        Column(modifier: context.modifier.fillMaxWidth()) {
+            if let tagged {
+                let count = tagged.size
+                for (index, taggedRenderable) in tagged.withIndex() {
+                    if index > 0 {
+                        androidx.compose.material3.Divider(color: Color.separator.colorImpl())
+                    }
+                    let isSelected = TagModifier.on(content: taggedRenderable, role: .tag)?.value == selection.wrappedValue
+                    let onClick: () -> Void = {
+                        selection.wrappedValue = TagModifier.on(content: taggedRenderable, role: .tag)?.value as! SelectionValue
+                        noteSelectionChanged()
+                    }
+                    Row(modifier: Modifier.fillMaxWidth().clickable(onClick: onClick).padding(top: index == 0 ? 0.dp : 11.dp, bottom: index == count - 1 ? 0.dp : 11.dp).heightIn(min: 22.dp), verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
+                        Box(modifier: Modifier.weight(Float(1.0))) {
+                            taggedRenderable.Render(context: contentContext)
+                        }
+                        if isSelected {
+                            androidx.compose.material3.Icon(imageVector: Icons.Filled.Check, contentDescription: nil, tint: tint, modifier: Modifier.size(20.dp))
+                        }
                     }
                 }
-                Box {
-                    RenderSelectedValue(selectedRenderable: selected, taggedRenderables: tagged, context: context, style: style, performsAction: false)
-                    if style != .segmented && style != .navigationLink {
-                        RenderPickerSelectionMenu(taggedRenderables: tagged, context: context)
-                    }
+            }
+        }
+    }
+
+    @Composable private func RenderMenuListItem(context: ComposeContext, style: PickerStyle) {
+        let (selected, tagged) = processPickerContent(content: content, selection: selection, context: context)
+        Row(modifier: context.modifier, verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
+            if !EnvironmentValues.shared._labelsHidden {
+                Box(modifier: Modifier.padding(end: 8.dp).weight(Float(1.0))) {
+                    label.Compose(context: context)
                 }
-                if style == .navigationLink {
-                    NavigationLink.RenderChevron()
+            }
+            Box {
+                RenderSelectedValue(selectedRenderable: selected, taggedRenderables: tagged, context: context, style: style, performsAction: false)
+                if style != .segmented && style != .navigationLink {
+                    RenderPickerSelectionMenu(taggedRenderables: tagged, context: context)
                 }
+            }
+            if style == .navigationLink {
+                NavigationLink.RenderChevron()
             }
         }
     }
@@ -315,8 +364,7 @@ public struct PickerStyle: RawRepresentable, Equatable {
     public static let navigationLink = PickerStyle(rawValue: 2) // For bridging
     public static let segmented = PickerStyle(rawValue: 3) // For bridging
 
-    @available(*, unavailable)
-    public static let inline = PickerStyle(rawValue: 4) // For bridging
+    public static let inline = PickerStyle(rawValue: 4) // For bridging (available: Flat-Six patch)
 
     @available(*, unavailable)
     public static let wheel = PickerStyle(rawValue: 5) // For bridging
