@@ -178,10 +178,11 @@ public struct Text: View, Renderable, Equatable {
         if let environmentFont = EnvironmentValues.shared.font {
             font = environmentFont
         } else if let sectionHeaderStyle = EnvironmentValues.shared._listSectionHeaderStyle {
-            font = Font.callout
             if sectionHeaderStyle == .plain {
-                font = font.bold()
+                font = Font.callout.bold()
             } else {
+                // A grouped list's header in iOS's style for it: the footnote style, uppercased (Flat-Six patch)
+                font = Font.footnote
                 isUppercased = true
             }
         } else if let sectionFooterStyle = EnvironmentValues.shared._listSectionFooterStyle, sectionFooterStyle != .plain {
