@@ -32,8 +32,10 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.outlined.KeyboardArrowRight
@@ -259,6 +261,7 @@ public struct NavigationStack : View, Renderable {
             title = arguments.title
             titleDisplayPreference = arguments.toolbarPreferences.titleDisplayMode
         }
+        state.title = hasTitle ? title : nil   // for the next entry's back button (Flat-Six patch)
 
         let topBarPreferences = arguments.toolbarPreferences.navigationBar
         let bottomBarPreferences = arguments.toolbarPreferences.bottomBar
@@ -472,10 +475,14 @@ public struct NavigationStack : View, Renderable {
                                                 colors: navigationIconButtonColors ?? IconButtonDefaults.filledIconButtonColors()
                                             ) { backIcon() }
                                         case Material3TopAppBarNavigationIconButtonStyle.iconButton:
-                                            IconButton(
-                                                onClick: { navigator.value.navigateBack() },
-                                                colors: navigationIconButtonColors ?? IconButtonDefaults.iconButtonColors()
-                                            ) { backIcon() }
+                                            // iOS's back button (Flat-Six patch): the chevron and the page before's title
+                                            // — "Back" where it has none or it runs long — in the tint, not Material's arrow
+                                            let previousTitle = navigator.value.previousState(before: state)?.title?.localizedTextString() ?? ""
+                                            let backTitle = !previousTitle.isEmpty && previousTitle.count <= 12 ? previousTitle : "Back"
+                                            Row(modifier: Modifier.clickable(interactionSource: nil, indication: nil, onClick: { navigator.value.navigateBack() }).height(44.dp).padding(start: 2.dp, end: 8.dp), verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
+                                                Icon(imageVector: Icons.AutoMirrored.Filled.ArrowBackIos, contentDescription: "Back", tint: tint.colorImpl(), modifier: Modifier.size(22.dp))
+                                                androidx.compose.material3.Text(text: backTitle, color: tint.colorImpl(), style: MaterialTheme.typography.bodyLarge, maxLines: 1)
+                                            }
                                         }
                                     }
                                     for renderable in topLeadingItems {
@@ -936,6 +943,8 @@ private func mergeNavigationDestinationsWithLayoutHints(_ destinations: Navigati
         let layoutHints: NavigationStackLayoutHints?
         let stateSaver: ComposeStateSaver
         var titleDisplayMode: ToolbarTitleDisplayMode?
+        /// The entry's title, for the back button of the entry after it (Flat-Six patch).
+        var title: Text?
         var binding: Binding<Bool>?
 
         init(id: String, route: String, destination: ((Any) -> any View)? = nil, targetValue: Any? = nil, layoutHints: NavigationStackLayoutHints? = nil, stateSaver: ComposeStateSaver = ComposeStateSaver()) {
@@ -1048,6 +1057,19 @@ private func mergeNavigationDestinationsWithLayoutHints(_ destinations: Navigati
         let rootState = BackStackState(id: rootId, route: Self.rootRoute)
         backStackState[rootId] = rootState
         return rootState
+    }
+
+    /// The entry before the given one in the back stack: its title is the back button's (Flat-Six patch).
+    func previousState(before state: BackStackState) -> BackStackState? {
+        var previous: BackStackState? = nil
+        for key in navBackStack {
+            let id = stableEntryId(forKey: key)
+            if id == state.id {
+                return previous
+            }
+            previous = backStackState[id]
+        }
+        return nil
     }
 
     /// The entry being navigated to.
