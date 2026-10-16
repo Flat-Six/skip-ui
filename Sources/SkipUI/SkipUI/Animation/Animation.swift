@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
@@ -658,8 +659,12 @@ public enum AnimationCompletionCriteria : Hashable {
     // SKIP NOWARN
     let resetValue = rememberSaveable(stateSaver: context.stateSaver as Saver<T?, Any>) { mutableStateOf<T?>(nil) }
     let animatable = remember { Animatable(resetValue.value ?? value, converter) }
-    let isAnimating = animatable.isRunning || animatable.value != animatable.targetValue
-    if isAnimating || animatable.value != value {
+    // Nothing of the animatable observed here (Flat-Six patch): read while composing, its value recomposed this view
+    // on every frame of an animation, and whether it runs and where it goes recomposed it as one starts and ends. What
+    // is read here is only needed when the view recomposes anyway, for a new target.
+    let isAnimating = Snapshot.withoutReadObservation { animatable.isRunning }
+    let isNewTarget = Snapshot.withoutReadObservation { animatable.targetValue } != value
+    if isAnimating || isNewTarget {
         let animation = Animation.current(isAnimating: isAnimating)
         LaunchedEffect(value, animation) {
             if let animation {
@@ -693,9 +698,13 @@ public enum AnimationCompletionCriteria : Hashable {
     // SKIP NOWARN
     let resetValue = rememberSaveable(stateSaver: context.stateSaver as Saver<T?, Any>) { mutableStateOf<T?>(nil) }
     let animatable = remember { Animatable(resetValue.value ?? value, converter) }
-    let isAnimating = animatable.isRunning || animatable.value != animatable.targetValue
-    let isNewTarget = animatable.targetValue != value
-    if isAnimating || animatable.value != value {
+    // Nothing of the animatable observed here (Flat-Six patch): read while composing, its value recomposed this view,
+    // and all it holds, on every frame of an animation, and whether it runs and where it goes recomposed it as one
+    // starts and ends. What is read here is only needed when the view recomposes anyway, for a new target; the
+    // modifiers read the value as they place, measure or draw (DeferredAnimation.kt).
+    let isAnimating = Snapshot.withoutReadObservation { animatable.isRunning }
+    let isNewTarget = Snapshot.withoutReadObservation { animatable.targetValue } != value
+    if isAnimating || isNewTarget {
         // A new target with no provenance is a plain state write, so it must cancel any
         // previous in-flight animation instead of inheriting the remembered animation.
         // Only the computed target reaches this layer. For `anchor + drag`, we cannot tell

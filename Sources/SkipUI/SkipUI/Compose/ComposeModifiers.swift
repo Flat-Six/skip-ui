@@ -231,16 +231,23 @@ class ColorMultiplyModifier : DrawModifier {
 /// an `opacity()` ends up with a hard edge. The layer opened here is bounded by the current clip
 /// instead, which is what SwiftUI does.
 class OpacityModifier : DrawModifier {
-    let opacity: Float
+    let opacity: () -> Float
 
     init(opacity: Float) {
-        self.opacity = opacity
+        self.opacity = { opacity }
+    }
+
+    /// The opacity read as the view is drawn, never while composing: an animated opacity redraws the view on each
+    /// frame rather than recomposing it and all it holds (Flat-Six patch).
+    init(animatedOpacity: @escaping () -> Float) {
+        self.opacity = animatedOpacity
     }
 
     // SKIP DECLARE: override fun ContentDrawScope.draw()
     override func draw() {
+        let value = opacity()
         let paint = Paint().apply {
-            alpha = opacity
+            alpha = value
         }
         drawIntoCanvas {
             let clip = $0.nativeCanvas.clipBounds

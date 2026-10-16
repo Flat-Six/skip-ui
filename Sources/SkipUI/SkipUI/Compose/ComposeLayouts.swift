@@ -52,6 +52,20 @@ import androidx.compose.ui.unit.dp
     }
 }
 
+/// Compose a view with the given frame, its width and height (when given) read as it is measured, never while
+/// composing: an animated frame re-measures the view on each frame rather than recomposing it and all it holds
+/// (Flat-Six patch). Otherwise as the frame above.
+@Composable func FrameLayout(content: Renderable, context: ComposeContext, animatedWidth: (() -> Double)?, animatedHeight: (() -> Double)?, alignment: Alignment) {
+    var modifier = context.modifier.animatedRequiredSize(width: animatedWidth, height: animatedHeight)
+    modifier = ZIndexModifier.consume(for: content, with: modifier)
+    ComposeContainer(modifier: modifier, fixedWidth: animatedWidth != nil, fixedHeight: animatedHeight != nil) { modifier in
+        let contentContext = context.content()
+        Box(modifier: modifier, contentAlignment: alignment.asComposeAlignment()) {
+            content.Render(context: contentContext)
+        }
+    }
+}
+
 /// Compose a view with the given frame.
 @Composable func FrameLayout(content: Renderable, context: ComposeContext, minWidth: CGFloat?, idealWidth: CGFloat?, maxWidth: CGFloat?, minHeight: CGFloat?, idealHeight: CGFloat?, maxHeight: CGFloat?, alignment: Alignment) {
     ComposeFlexibleContainer(modifier: context.modifier, flexibleWidthIdeal: flexibleLayoutFloat(idealWidth), flexibleWidthMin: flexibleLayoutFloat(minWidth), flexibleWidthMax: flexibleLayoutFloat(maxWidth), flexibleHeightIdeal: flexibleLayoutFloat(idealHeight), flexibleHeightMin: flexibleLayoutFloat(minHeight), flexibleHeightMax: flexibleLayoutFloat(maxHeight)) { modifier in
@@ -368,17 +382,16 @@ private func adjacentSafeAreaEdges(bounds: Rect, safeArea: SafeArea, isRTL: Bool
     }
 }
 
-/// Layout the given view with the given position.
-@Composable func PositionLayout(content: Renderable, x: CGFloat, y: CGFloat, context: ComposeContext) {
+/// Layout the given view with the given position: `x` and `y` read as it is placed, never while composing, so an
+/// animated position re-places the view on each frame rather than recomposing it (Flat-Six patch).
+@Composable func PositionLayout(content: Renderable, x: @escaping () -> CGFloat, y: @escaping () -> CGFloat, context: ComposeContext) {
     PositionLayout(x: x, y: y, context: context) { content.Render($0) }
 }
 
-@Composable func PositionLayout(x: CGFloat, y: CGFloat, context: ComposeContext, target: @Composable (ComposeContext) -> Void) {
+@Composable func PositionLayout(x: @escaping () -> CGFloat, y: @escaping () -> CGFloat, context: ComposeContext, target: @Composable (ComposeContext) -> Void) {
     // SwiftUI expands to fill the available space and places within that
     Box(modifier: context.modifier.fillSize()) {
         let density = LocalDensity.current
-        let xPx = with(density) { x.dp.roundToPx() }
-        let yPx = with(density) { y.dp.roundToPx() }
         Layout(content = {
             target(context.content())
         }) { measurables, constraints in
@@ -387,6 +400,8 @@ private func adjacentSafeAreaEdges(bounds: Rect, safeArea: SafeArea, isRTL: Bool
             }
             let targetPlaceables = measurables.map { $0.measure(constraints) }
             layout(width: targetPlaceables[0].width, height: targetPlaceables[0].height) {
+                let xPx = with(density) { x().dp.roundToPx() }
+                let yPx = with(density) { y().dp.roundToPx() }
                 for targetPlaceable in targetPlaceables {
                     targetPlaceable.placeRelative(x: xPx - targetPlaceable.width / 2, y: yPx - targetPlaceable.height / 2)
                 }

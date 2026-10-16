@@ -620,7 +620,16 @@ extension View {
         let animTx = StateTracking.captureLastReadAndClear()
         return ModifiedContent(content: self, modifier: RenderModifier { renderable, context in
             let animatable = (Float(width ?? 0.0), Float(height ?? 0.0)).asAnimatable(context: context, animTx: animTx)
-            FrameLayout(content: renderable, context: context, width: width == nil ? nil : Double(animatable.value.0), height: height == nil ? nil : Double(animatable.value.1), alignment: alignment)
+            // read as the frame is measured (Flat-Six patch: DeferredAnimation.kt)
+            var animatedWidth: (() -> Double)? = nil
+            if width != nil {
+                animatedWidth = { Double(animatable.value.0) }
+            }
+            var animatedHeight: (() -> Double)? = nil
+            if height != nil {
+                animatedHeight = { Double(animatable.value.1) }
+            }
+            FrameLayout(content: renderable, context: context, animatedWidth: animatedWidth, animatedHeight: animatedHeight, alignment: alignment)
         })
         #else
         return self
@@ -861,12 +870,9 @@ extension View {
         #if SKIP
         let animTx = StateTracking.captureLastReadAndClear()
         return ModifiedContent(content: self, modifier: RenderModifier {
-            let density = LocalDensity.current
             let animatable = (Float(x), Float(y)).asAnimatable(context: $0, animTx: animTx)
-            let offsetPx = with(density) {
-                IntOffset(animatable.value.0.dp.roundToPx(), animatable.value.1.dp.roundToPx())
-            }
-            return $0.modifier.offset { offsetPx }
+            // read as the view is placed (Flat-Six patch: DeferredAnimation.kt)
+            return $0.modifier.animatedOffset(offset: animatable)
         })
         #else
         return self
@@ -1097,7 +1103,8 @@ extension View {
         let animTx = StateTracking.captureLastReadAndClear()
         return ModifiedContent(content: self, modifier: RenderModifier { context in
             let animatable = Float(opacity).asAnimatable(context: context, animTx: animTx)
-            return context.modifier.then(OpacityModifier(opacity: animatable.value))
+            // read as the view is drawn (Flat-Six patch)
+            return context.modifier.then(OpacityModifier(animatedOpacity: { animatable.value }))
         })
         #else
         return self
@@ -1193,12 +1200,9 @@ extension View {
         #if SKIP
         let animTx = StateTracking.captureLastReadAndClear()
         return ModifiedContent(content: self, modifier: RenderModifier { renderable, context in
-            let density = LocalDensity.current
             let animatable = (Float(x), Float(y)).asAnimatable(context: context, animTx: animTx)
-            let positionPx = with(density) {
-                IntOffset(animatable.value.0.dp.roundToPx(), animatable.value.1.dp.roundToPx())
-            }
-            PositionLayout(content: renderable, x: Double(animatable.value.0), y: Double(animatable.value.1), context: context)
+            // read as the view is placed (Flat-Six patch)
+            PositionLayout(content: renderable, x: { Double(animatable.value.0) }, y: { Double(animatable.value.1) }, context: context)
         })
         #else
         return self
@@ -1244,7 +1248,8 @@ extension View {
         let animTx = StateTracking.captureLastReadAndClear()
         return ModifiedContent(content: self, modifier: RenderModifier { context in
             let animatable = Float(angle.degrees).asAnimatable(context: context, animTx: animTx)
-            return context.modifier.rotate(animatable.value)
+            // read as the layer is drawn (Flat-Six patch: DeferredAnimation.kt)
+            return context.modifier.animatedRotation(degrees: animatable, pivotX: Float(0.5), pivotY: Float(0.5))
         })
         #else
         return self
@@ -1256,10 +1261,8 @@ extension View {
         let animTx = StateTracking.captureLastReadAndClear()
         return ModifiedContent(content: self, modifier: RenderModifier { context in
             let animatable = Float(angle.degrees).asAnimatable(context: context, animTx: animTx)
-            return context.modifier.graphicsLayer(
-                transformOrigin: TransformOrigin(pivotFractionX: Float(anchor.x), pivotFractionY: Float(anchor.y)),
-                rotationZ: animatable.value
-            )
+            // read as the layer is drawn (Flat-Six patch: DeferredAnimation.kt)
+            return context.modifier.animatedRotation(degrees: animatable, pivotX: Float(anchor.x), pivotY: Float(anchor.y))
         })
         #else
         return self
@@ -1340,11 +1343,8 @@ extension View {
         let animTx = StateTracking.captureLastReadAndClear()
         return ModifiedContent(content: self, modifier: RenderModifier { context in
             let animatable = (Float(x), Float(y)).asAnimatable(context: context, animTx: animTx)
-            return context.modifier.graphicsLayer(
-                transformOrigin: TransformOrigin(pivotFractionX: Float(anchor.x), pivotFractionY: Float(anchor.y)),
-                scaleX: animatable.value.0,
-                scaleY: animatable.value.1
-            )
+            // read as the layer is drawn (Flat-Six patch: DeferredAnimation.kt)
+            return context.modifier.animatedScale(scale: animatable, pivotX: Float(anchor.x), pivotY: Float(anchor.y))
         })
         #else
         return self
@@ -1380,19 +1380,8 @@ extension View {
                 context: context,
                 animTx: animTx
             )
-            let density = LocalDensity.current
-            let translationXPixels = with(density) { animatedTranslation.value.0.dp.toPx() }
-            let translationYPixels = with(density) { animatedTranslation.value.1.dp.toPx() }
-            return context.modifier.graphicsLayer(
-                transformOrigin: TransformOrigin(
-                    pivotFractionX: Float(anchorX),
-                    pivotFractionY: Float(anchorY)
-                ),
-                scaleX: animatedScale.value.0,
-                scaleY: animatedScale.value.1,
-                translationX: translationXPixels,
-                translationY: translationYPixels
-            )
+            // read as the layer is drawn (Flat-Six patch: DeferredAnimation.kt)
+            return context.modifier.animatedCompositorTransform(scale: animatedScale, translation: animatedTranslation, pivotX: Float(anchorX), pivotY: Float(anchorY))
         })
         #else
         return self
