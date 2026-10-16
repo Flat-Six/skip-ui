@@ -123,11 +123,19 @@ public final class ShareLink : View, Renderable {
     @Composable func ComposeAction() {
         let localContext = LocalContext.current
 
+        // The message goes with the item, as UIKit's share sheet sends them both, and the subject heads the sheet's
+        // preview, where iOS shows the shared thing's name (Flat-Six patch): Skip sent the item alone, a shared
+        // place a bare maps link without its name
+        var shared = text
+        if let message, !message.localizedTextString().isEmpty {
+            shared = message.localizedTextString() + "\n" + text
+        }
         let intent = Intent().apply {
             action = Intent.ACTION_SEND
-            putExtra(Intent.EXTRA_TEXT, text)
+            putExtra(Intent.EXTRA_TEXT, shared)
             if let subject {
                 putExtra(Intent.EXTRA_SUBJECT, subject.localizedTextString())
+                putExtra(Intent.EXTRA_TITLE, subject.localizedTextString())
             }
             type = "text/plain"
         }
