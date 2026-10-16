@@ -252,6 +252,7 @@ public struct TabView : View, Renderable {
     @Composable private func RenderTabViewContent(context: ComposeContext) {
         // WARNING: This function is a potential recomposition hotspot. It should not need to be called on every tab
         // change. Test after any modification
+        let tabView = self   // for the entries (below): in their builders `self` is a layout scope (Flat-Six patch)
 
         let tabContext = context.content()
         let tabRenderables = EvaluateContent(context: tabContext)
@@ -549,6 +550,12 @@ public struct TabView : View, Renderable {
                         primaryActionContent: {},
                         content: {
                             let entryContext = context.content()
+                            // The tab view and context as they are now, for the entries to render (Flat-Six patch): an
+                            // entry, remembered with its tab's back stack, kept the tab view it was made by, and a tab
+                            // went on showing the content it was first given — a list never learnt which row had opened,
+                            // and kept drawing that row under the view that grew from it
+                            let currentTabView = rememberUpdatedState(tabView)
+                            let currentEntryContext = rememberUpdatedState(entryContext)
                             let activeStack = tabBackStacks[selectedTabIndex.value]
                             let tabEntryProvider: (NavKey) -> NavEntry<NavKey> = { key in
                                 let tabKey = key as! SkipTabViewRouteKey
@@ -588,7 +595,7 @@ public struct TabView : View, Renderable {
                                         // recomposing when called with the same values
                                         let arguments = TabEntryArguments(tabIndex: tabIndex, modifier: contentModifier, safeArea: contentSafeArea)
                                         PreferenceValues.shared.collectPreferences([tabBarPreferencesCollector]) {
-                                            RenderEntry(with: arguments, context: entryContext)
+                                            currentTabView.value.RenderEntry(with: arguments, context: currentEntryContext.value)
                                         }
                                     }
                                 })
