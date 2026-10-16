@@ -1124,6 +1124,24 @@ extension View {
         #endif
     }
 
+    /// An opacity the body of an animatable modifier sets, `slot` its place among the body's opacities (Flat-Six
+    /// patch: AnimatedModifierContent): drawn at the body's opacity for the frame's value of the modifier's data.
+    // SKIP @bridge
+    public func opacity(_ opacity: Double, animatedSlot slot: Int) -> any View {
+        #if SKIP
+        let animTx = StateTracking.captureLastReadAndClear()
+        return ModifiedContent(content: self, modifier: RenderModifier { context in
+            if let samples = LocalAnimatedModifierSamples.current {
+                return context.modifier.then(OpacityModifier(animatedOpacity: { Float(samples.opacity(slot, opacity)) }))
+            }
+            let animatable = Float(opacity).asAnimatable(context: context, animTx: animTx)
+            return context.modifier.then(OpacityModifier(animatedOpacity: { animatable.value }))
+        })
+        #else
+        return self
+        #endif
+    }
+
     public func overlay(_ overlay: any View, alignment: Alignment = .center) -> any View {
         #if SKIP
         return ModifiedContent(content: self, modifier: RenderModifier { renderable, context in
