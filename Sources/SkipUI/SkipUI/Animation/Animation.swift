@@ -187,9 +187,8 @@ public struct Animation : Hashable {
 
     /// Whether the bridged composition supplies per-modifier provenance via
     /// `primeBridgedProvenance` (SkipFuseUI versions with native provenance tracking). Set
-    /// (sticky) by the first prime call. When active, the marker fallback for nil provenance
-    /// is disabled — the native side explicitly primes nil for modifiers whose inputs were
-    /// not animated sources, restoring Lite-equivalent strict snap semantics in Fuse.
+    /// (sticky) by the first prime call. A primed animation wins; nil provenance still falls
+    /// back to the marker (`current(isAnimating:animTx:)`), since a derived value carries none.
     private static var bridgedProvenance = false
 
     #endif
@@ -291,8 +290,12 @@ public struct Animation : Hashable {
         if ambient == nil, let tx = animTx as? Transaction, !tx.disablesAnimations {
             ambient = tx.animation
         }
-        if ambient == nil, animTx == nil, bridgedComposition, !bridgedProvenance {
-            // Legacy SkipFuseUI (no native provenance): the marker is the only signal.
+        if ambient == nil, animTx == nil, bridgedComposition {
+            // SkipFuseUI: a modifier with no provenance of its own takes the marker. Native provenance pairs a
+            // modifier with the `@State` its own arguments read, and a value derived from one — a child view's
+            // property set from it, a local computed from it — arrives with none: a `withAnimation` changing it must
+            // still animate it, as SwiftUI's transaction animates every change it causes, so the marker of the
+            // frame it changed in is the signal (a plain write in that same frame animates too).
             ambient = recentWithAnimationAnimation
         }
         return resolve(isAnimating: isAnimating, ambient: ambient)
@@ -360,10 +363,31 @@ public struct Animation : Hashable {
         return spec is InfiniteRepeatableSpec<Any>
     }
 
+    /// Whether this is a held animation: a custom animation that never ends (`sampled(duration:step:samples:)`).
+    public var holds: Bool {
+        return ((spec as? TweenSpec<Any>)?.easing as? SampledEasing)?.holds == true
+    }
+
     init(spec: AnimationSpec<Any>, delay: Double = 0.0, speed: Double = 1.0) {
         self.spec = spec
     }
     #endif
+
+    /// A custom animation (SwiftUI's `CustomAnimation`) as SkipSwiftUI samples it: its progress for a unit change,
+    /// `samples[i]` at `i * step` seconds, over a course `duration` long, replayed by a tween's easing (SampledEasing).
+    /// A negative `duration` is a course that never ends — a held animation, kept at its last sample, at duration
+    /// scale 1 whatever the animator duration scale.
+    // SKIP @bridge
+    public static func sampled(duration: TimeInterval, step: TimeInterval, samples: [Double]) -> Animation {
+        #if SKIP
+        let holds = duration < 0.0
+        let millis = holds ? Int.max : max(1, Int(duration * 1000.0))
+        let easing = SampledEasing(seconds: Double(millis) / 1000.0, step: step, samples: samples, holds: holds)
+        return Animation(spec: TweenSpec<Any>(durationMillis: millis, easing: easing))
+        #else
+        fatalError()
+        #endif
+    }
 
     // SKIP @bridge
     public static func spring(duration: TimeInterval = 0.5, bounce: Double = 0.0, blendDuration: Double = 0.0) -> Animation {
@@ -644,7 +668,7 @@ public enum AnimationCompletionCriteria : Hashable {
                 } else {
                     resetValue.value = nil
                 }
-                animatable.animateTo(value, animationSpec: animation.asAnimationSpec() as! AnimationSpec<T>)
+                animatable.animateTo(value, animationSpec: animation.asAnimationSpec() as! AnimationSpec<T>, holds: animation.holds)
             } else {
                 resetValue.value = nil
                 animatable.snapTo(value)
@@ -655,7 +679,7 @@ public enum AnimationCompletionCriteria : Hashable {
 }
 
 /// Animatable plumbing for modifiers that capture provenance at entry: `animTx` carries the
-/// per-slot transaction (or nil → snap); the marker fallback is NOT consulted.
+/// per-slot transaction (or nil → snap; in a SkipFuseUI composition nil takes the marker).
 @Composable func toAnimatable<T, VectorT>(value: T, converter: TwoWayConverter<T, VectorT>, context: ComposeContext, animTx: StateMutationTransaction?) -> Animatable<T, VectorT> where T: Any, VectorT: AnimationVector {
     if let transaction = animTx as? Transaction, let applied = transaction.bridgedCompositionApplied {
         // Do not clear during evaluation: sibling bodies still need the same stamp, and an
@@ -685,7 +709,7 @@ public enum AnimationCompletionCriteria : Hashable {
                 } else {
                     resetValue.value = nil
                 }
-                animatable.animateTo(value, animationSpec: animation.asAnimationSpec() as! AnimationSpec<T>)
+                animatable.animateTo(value, animationSpec: animation.asAnimationSpec() as! AnimationSpec<T>, holds: animation.holds)
             } else {
                 resetValue.value = nil
                 animatable.snapTo(value)
