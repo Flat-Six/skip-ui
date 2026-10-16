@@ -12,6 +12,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -187,6 +188,18 @@ public final class Menu : View, Renderable {
                     button.action()
                     replaceMenu(nil)
                 }
+            } else if let toggle = stripped as? Toggle {
+                // A toggle as UIKit draws one in a menu (Flat-Six patch): its label and icon, a check when it is on, a
+                // tap turning it over and closing the menu. Skip drew the toggle's own row, a Material switch the dropdown
+                // squeezed over its label, at worst covering it
+                var tintColor = Color(colorImpl: { MaterialTheme.colorScheme.onSurface })
+                if !isItemEnabled {
+                    tintColor = tintColor.opacity(Double(ContentAlpha.disabled))
+                }
+                RenderDropdownMenuItem(for: ComposeBuilder.from { toggle.label }, context: context, modifier: itemModifier, tintColor: tintColor, isSelected: toggle.isOn.wrappedValue, isEnabled: isItemEnabled) {
+                    toggle.isOn.wrappedValue = !toggle.isOn.wrappedValue
+                    replaceMenu(nil)
+                }
             } else if let text = stripped as? Text {
                 DropdownMenuItem(text: { text.Render(context: context) }, onClick: {}, modifier: itemModifier, enabled: false)
             } else if let section = stripped as? Section {
@@ -250,6 +263,15 @@ public final class Menu : View, Renderable {
         return disabled == true
     }
 
+    /// An item's title in body type, as UIKit sets a menu's items (Flat-Six patch): Material's item sets its label type,
+    /// 14 sp, inside its text slot, which held where nothing above the menu set a font and gave way to a font set above
+    /// it where one was, so the same menu came in two sizes.
+    @Composable private static func BodyTitle(content: @Composable () -> Void) {
+        ProvideTextStyle(MaterialTheme.typography.bodyLarge) {
+            content()
+        }
+    }
+
     @Composable private static func RenderDropdownMenuItem(for view: ComposeBuilder, context: ComposeContext, modifier: Modifier = Modifier, tintColor: Color? = nil, isSelected: Bool? = nil, isEnabled: Bool = true, action: () -> Void) {
         let renderables = view.Evaluate(context: context, options: 0)
         let label = renderables.firstOrNull()?.strip() as? Label
@@ -261,9 +283,9 @@ public final class Menu : View, Renderable {
                 selectedIcon = {}
             }
             if let label {
-                DropdownMenuItem(text: { label.RenderTitle(context: context, titleColor: tintColor) }, leadingIcon: selectedIcon, trailingIcon: { label.RenderImage(context: context, imageColor: tintColor) }, onClick: action, modifier: modifier, enabled: isEnabled)
+                DropdownMenuItem(text: { BodyTitle { label.RenderTitle(context: context, titleColor: tintColor) } }, leadingIcon: selectedIcon, trailingIcon: { label.RenderImage(context: context, imageColor: tintColor) }, onClick: action, modifier: modifier, enabled: isEnabled)
             } else {
-                DropdownMenuItem(text: {
+                DropdownMenuItem(text: { BodyTitle {
                     EnvironmentValues.shared.setValues{
                         $0.set_foregroundStyle(tintColor)
                         return ComposeResult.ok
@@ -272,13 +294,13 @@ public final class Menu : View, Renderable {
                             renderable.Render(context: context)
                         }
                     }
-                }, leadingIcon: selectedIcon, onClick: action, modifier: modifier, enabled: isEnabled)
+                } }, leadingIcon: selectedIcon, onClick: action, modifier: modifier, enabled: isEnabled)
             }
         } else {
             if let label {
-                DropdownMenuItem(text: { label.RenderTitle(context: context, titleColor: tintColor) }, trailingIcon: { label.RenderImage(context: context, imageColor: tintColor) }, onClick: action, modifier: modifier, enabled: isEnabled)
+                DropdownMenuItem(text: { BodyTitle { label.RenderTitle(context: context, titleColor: tintColor) } }, trailingIcon: { label.RenderImage(context: context, imageColor: tintColor) }, onClick: action, modifier: modifier, enabled: isEnabled)
             } else {
-                DropdownMenuItem(text: {
+                DropdownMenuItem(text: { BodyTitle {
                     EnvironmentValues.shared.setValues {
                         $0.set_foregroundStyle(tintColor)
                         return ComposeResult.ok
@@ -287,7 +309,7 @@ public final class Menu : View, Renderable {
                             renderable.Render(context: context)
                         }
                     }
-                }, onClick: action, modifier: modifier, enabled: isEnabled)
+                } }, onClick: action, modifier: modifier, enabled: isEnabled)
             }
         }
     }
