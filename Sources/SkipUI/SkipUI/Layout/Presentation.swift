@@ -118,7 +118,7 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
 }
 
 // SKIP INSERT: @OptIn(ExperimentalMaterial3Api::class)
-@Composable func SheetPresentation(isPresented: Binding<Bool>, isFullScreen: Bool, context: ComposeContext, content: () -> any View, onDismiss: (() -> Void)?) {
+@Composable func SheetPresentation(isPresented: Binding<Bool>, isFullScreen: Bool, context: ComposeContext, content: () -> any View, onDismiss: (() -> Void)?, overlay: Modifier? = nil) {
     let interactiveDismissDisabledPreference = rememberSaveable(stateSaver: context.stateSaver as! Saver<Preference<Bool>, Any>) { mutableStateOf(Preference<Bool>(key: InteractiveDismissDisabledPreferenceKey.self)) }
     let interactiveDismissDisabledCollector = PreferenceCollector<Bool>(key: InteractiveDismissDisabledPreferenceKey.self, state: interactiveDismissDisabledPreference)
 
@@ -166,6 +166,16 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
         let presentationColor = contentRenderables.firstNotNullOfOrNull { renderable in
             renderable.forEachModifier { ($0 as? PresentationBackgroundColorModifier)?.color }
         }
+        // A sheet that leaves its presenter live — SwiftUI's presentationBackgroundInteraction(.enabled…) — drawn over the
+        // presenter in its own window, from the foot of the window (Flat-Six patch, InlineSheet.kt): Material's sheet
+        // opens a window over the whole screen, and nothing behind it takes a touch. A phone upright only: a card on a
+        // tablet and the screen-high sheet of a phone on its side cover the presenter as UIKit's do.
+        let backgroundInteraction = contentRenderables.firstNotNullOfOrNull { renderable in
+            renderable.forEachModifier { ($0 as? PresentationBackgroundInteractionModifier)?.interaction }
+        }
+        if let overlay, let backgroundInteraction, backgroundInteraction.enabled == true, !isFullScreen, !isCompactHeight, !isCard {
+            InlineSheetPresentation(isPresented: isPresented, context: context, contentRenderables: contentRenderables, interaction: backgroundInteraction, overlay: overlay, presentationColor: presentationColor, interactiveDismissDisabled: interactiveDismissDisabled, interactiveDismissDisabledCollector: interactiveDismissDisabledCollector)
+        } else {
         let onDismissRequest = {
             isPresented.set(false)
         }
@@ -290,6 +300,7 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
                 androidx.compose.foundation.layout.Spacer(modifier: Modifier.height(inset))
             }
         }
+        }
     }
 
     // When our isPresented binding flips from true to false, hide the sheet if needed and invoke onDismiss
@@ -307,6 +318,68 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
                 onDismissState.value?()
             }
         }
+    }
+}
+
+/// A sheet over its presenter, the presenter live behind it up to `interaction`'s detent (Flat-Six patch; the sheet
+/// itself is InlineSheet.kt's). Its detents' heights as the modal sheet's: half the window for medium; a fixed height
+/// above the navigation bar; the window's height less the status bar and 10, as iOS's large sheet leaves. Its detents and
+/// the one selected come from `presentationDetents(_:selection:)` on the sheet's root (PresentationDetentSelectionModifier),
+/// which the user's drags set; without one, the single detent its preference names.
+// SKIP INSERT: @OptIn(ExperimentalMaterial3Api::class)
+@Composable func InlineSheetPresentation(isPresented: Binding<Bool>, context: ComposeContext, contentRenderables: kotlin.collections.List<Renderable>, interaction: PresentationBackgroundInteraction, overlay: Modifier, presentationColor: Color?, interactiveDismissDisabled: Bool, interactiveDismissDisabledCollector: PreferenceCollector<Bool>) {
+    let density = LocalDensity.current
+    let windowHeight = Float(LocalWindowInfo.current.containerSize.height)
+    let sheetDepth = EnvironmentValues.shared._sheetDepth
+    let isEdgeToEdge = EnvironmentValues.shared._isEdgeToEdge == true
+    let topBar = with(density) { WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding().toPx() }
+    let bottomBar = with(density) { max(0.dp, WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding()).toPx() }
+    let largest = windowHeight - topBar - with(density) { (10 + 24 * sheetDepth).dp.toPx() }
+    let selection = contentRenderables.firstNotNullOfOrNull { renderable in
+        renderable.forEachModifier { $0 as? PresentationDetentSelectionModifier }
+    }
+    let detents: kotlin.collections.List<PresentationDetent> = selection?.detents ?? listOf(PresentationDetent.large)
+    let pxPerDp = density.density
+    let heights: kotlin.collections.List<Float> = detents.map { inlineSheetHeight(of: $0, windowHeight: windowHeight, largest: largest, bottomBar: bottomBar, pxPerDp: pxPerDp) }
+    var liveUpTo = Float.MAX_VALUE
+    if let upThrough = interaction.upThrough {
+        let index = detents.indexOf(upThrough)
+        liveUpTo = index >= 0 ? heights[index] : Float(0.0)
+    }
+    InlineSheet(overlay: overlay, heights: heights, selected: selection?.selectedIndex ?? 0, onSelect: { index in selection?.select?(index) }, liveUpTo: liveUpTo, grabber: detents.size > 1, cornerRadius: overlayPresentationCornerRadius.dp, onDimTap: interactiveDismissDisabled ? nil : { isPresented.set(false) }) { modifier in
+        Box(modifier: modifier) {
+            let stateSaver = remember { ComposeStateSaver() }
+            let presentationContext = context.content(stateSaver: stateSaver)
+            ElevatedPresentationTheme(isElevated: true) {
+            PresentationRoot(backgroundColor: presentationColor, context: presentationContext, absoluteSystemBarEdges: isEdgeToEdge ? Edge.Set.bottom : Edge.Set(rawValue: 0)) { context in
+                EnvironmentValues.shared.setValues {
+                    $0.set_sheetDepth(sheetDepth + 1)
+                    $0.setdismiss(DismissAction(action: { isPresented.set(false) }))
+                    return ComposeResult.ok
+                } in: {
+                    PreferenceValues.shared.collectPreferences([interactiveDismissDisabledCollector]) {
+                        for renderable in contentRenderables {
+                            renderable.Render(context: context)
+                        }
+                    }
+                }
+            }
+            }
+        }
+    }
+}
+
+/// A detent's height for a sheet over its presenter, in pixels above the window's foot (Flat-Six patch).
+func inlineSheetHeight(of detent: PresentationDetent, windowHeight: Float, largest: Float, bottomBar: Float, pxPerDp: Float) -> Float {
+    switch detent {
+    case .medium:
+        return windowHeight / Float(2.0)
+    case .height(let h):
+        return min(largest, Float(h) * pxPerDp + bottomBar)
+    case .fraction(let f):
+        return min(largest, windowHeight * Float(f))
+    default:
+        return largest
     }
 }
 
@@ -1302,10 +1375,44 @@ extension View {
         return presentationDetents(set)
     }
 
-    @available(*, unavailable)
-    public func presentationDetents(_ detents: Set<PresentationDetent>, selection: Binding<PresentationDetent>) -> some View {
+    /// The detents with one selected (Flat-Six patch): the selected detent is the sheet's, and a sheet that leaves its
+    /// presenter live (`presentationBackgroundInteraction`) moves between them under the user's drag, setting the selection.
+    public func presentationDetents(_ detents: Set<PresentationDetent>, selection: Binding<PresentationDetent>) -> any View {
+        #if SKIP
+        let ordered: kotlin.collections.MutableList<PresentationDetent> = mutableListOf()
+        for detent in detents {
+            ordered.add(detent)
+        }
+        ordered.sortBy { $0.hashCode() }   // in one order every time, as a Set's is not
+        return presentationDetents(ordered: ordered, selectedIndex: ordered.indexOf(selection.wrappedValue), select: { index in
+            selection.wrappedValue = ordered[index]
+        })
+        #else
         return self
+        #endif
     }
+
+    /// The detents in the bridging's order, the selected one's index, and how to select another (Flat-Six patch).
+    // SKIP @bridge
+    public func presentationDetents(bridgedDetents: [Int], values: [CGFloat], selectedIndex: Int, setSelectedIndex: @escaping (Int) -> Void) -> any View {
+        #if SKIP
+        let ordered: kotlin.collections.MutableList<PresentationDetent> = mutableListOf()
+        for i in 0..<bridgedDetents.count {
+            ordered.add(PresentationDetent.forBridged(identifier: bridgedDetents[i], value: values[i]) ?? PresentationDetent.large)
+        }
+        return presentationDetents(ordered: ordered, selectedIndex: selectedIndex, select: setSelectedIndex)
+        #else
+        return self
+        #endif
+    }
+
+    #if SKIP
+    private func presentationDetents(ordered: kotlin.collections.List<PresentationDetent>, selectedIndex: Int, select: @escaping (Int) -> Void) -> any View {
+        let selected = selectedIndex >= 0 && selectedIndex < ordered.size ? ordered[selectedIndex] : PresentationDetent.large
+        let preferred = preference(key: PresentationDetentPreferences.self, value: PresentationDetentPreferences(detent: selected))
+        return ModifiedContent(content: preferred, modifier: PresentationDetentSelectionModifier(detents: ordered, selectedIndex: selectedIndex, select: select))
+    }
+    #endif
 
     public func presentationDragIndicator(_ visibility: Visibility) -> any View {
         #if SKIP
@@ -1320,9 +1427,31 @@ extension View {
         return presentationDragIndicator(Visibility(rawValue: bridgedVisibility) ?? .automatic)
     }
 
-    @available(*, unavailable)
-    public func presentationBackgroundInteraction(_ interaction: PresentationBackgroundInteraction) -> some View {
+    /// What is behind a sheet takes touches (Flat-Six patch): with `.enabled`, a sheet on a phone upright is drawn over
+    /// its presenter, which stays live behind it up to the detent named (InlineSheet.kt).
+    public func presentationBackgroundInteraction(_ interaction: PresentationBackgroundInteraction) -> any View {
+        #if SKIP
+        return ModifiedContent(content: self, modifier: PresentationBackgroundInteractionModifier(interaction: interaction))
+        #else
         return self
+        #endif
+    }
+
+    /// `bridgedKind`: 0 automatic, 1 enabled (up through the detent given, where one is), 2 disabled (Flat-Six patch).
+    // SKIP @bridge
+    public func presentationBackgroundInteraction(bridgedKind: Int, upThroughIdentifier: Int, upThroughValue: CGFloat) -> any View {
+        let upThrough = PresentationDetent.forBridged(identifier: upThroughIdentifier, value: upThroughValue)
+        switch bridgedKind {
+        case 1:
+            if let upThrough {
+                return presentationBackgroundInteraction(.enabled(upThrough: upThrough))
+            }
+            return presentationBackgroundInteraction(.enabled)
+        case 2:
+            return presentationBackgroundInteraction(.disabled)
+        default:
+            return presentationBackgroundInteraction(.automatic)
+        }
     }
 
     @available(*, unavailable)
@@ -1403,9 +1532,7 @@ extension View {
 
     public func sheet(isPresented: Binding<Bool>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> any View) -> some View {
         #if SKIP
-        return ModifiedContent(content: self, modifier: PresentationModifier(providesNavigation: false) { context in
-            SheetPresentation(isPresented: isPresented, isFullScreen: false, context: context, content: content, onDismiss: onDismiss)
-        })
+        return ModifiedContent(content: self, modifier: SheetModifier(isPresented: isPresented, onDismiss: onDismiss, content: content))
         #else
         return self
         #endif
@@ -1441,6 +1568,83 @@ final class PresentationModifier: SideEffectModifier {
             }
             return ComposeResult.ok
         }
+    }
+}
+
+/// A sheet's modifier (Flat-Six patch): the presenter in a box that sizes as the presenter alone, the sheet composed after
+/// it there. Material's sheet opens a window of its own, which leaves its place in the tree free; a sheet that leaves its
+/// presenter live (InlineSheet.kt) is drawn over the presenter in that box, in the presenter's window. As
+/// PresentationModifier's, the sheet is a side effect of the presenter's first renderable, without the navigator, the
+/// animation or the search state of the presenter's context.
+final class SheetModifier: ModifierProtocol {
+    let role: ModifierRole = ModifierRole.unspecified
+    private let isPresented: Binding<Bool>
+    private let onDismiss: (() -> Void)?
+    private let sheetContent: () -> any View
+
+    init(isPresented: Binding<Bool>, onDismiss: (() -> Void)?, content: @escaping () -> any View) {
+        self.isPresented = isPresented
+        self.onDismiss = onDismiss
+        self.sheetContent = content
+    }
+
+    @Composable override func Evaluate(content: View, context: ComposeContext, options: Int) -> kotlin.collections.List<Renderable>? {
+        let renderables = ModifiedContent.Evaluate(content: content, context: context, options: options)
+        if renderables.size == 0 {
+            Present(context: context, overlay: nil)
+            return listOf()
+        } else if renderables.size == 1 && renderables[0] === content {
+            return nil
+        } else {
+            let presenting = ModifiedContent(content: renderables[0] as Renderable, modifier: self)
+            return listOf(presenting) + renderables.drop(1)
+        }
+    }
+
+    @Composable override func Render(content: Renderable, context: ComposeContext) {
+        Box(modifier: context.modifier, propagateMinConstraints: true) {
+            content.Render(context: context.content())
+            Present(context: context, overlay: Modifier.matchParentSize())
+        }
+    }
+
+    @Composable private func Present(context: ComposeContext, overlay: Modifier?) {
+        // SKIP INSERT: val providedNavigator = LocalNavigator provides null
+        CompositionLocalProvider(providedNavigator) {
+            EnvironmentValues.shared.setValues {
+                $0.set_animation(nil)
+                $0.set_searchableState(nil)
+                return ComposeResult.ok
+            } in: {
+                SheetPresentation(isPresented: isPresented, isFullScreen: false, context: context.content(), content: sheetContent, onDismiss: onDismiss, overlay: overlay)
+            }
+        }
+    }
+}
+
+/// A sheet's interaction with what is behind it, read off the sheet's root view before its first composition (Flat-Six
+/// patch).
+final class PresentationBackgroundInteractionModifier: RenderModifier {
+    let interaction: PresentationBackgroundInteraction
+
+    init(interaction: PresentationBackgroundInteraction) {
+        self.interaction = interaction
+        super.init()
+    }
+}
+
+/// A sheet's detents, the one selected and how to select another, read off the sheet's root view (Flat-Six patch): what a
+/// sheet the user drags between its detents needs (InlineSheet.kt).
+final class PresentationDetentSelectionModifier: RenderModifier {
+    let detents: kotlin.collections.List<PresentationDetent>
+    let selectedIndex: Int
+    let select: ((Int) -> Void)?
+
+    init(detents: kotlin.collections.List<PresentationDetent>, selectedIndex: Int, select: ((Int) -> Void)?) {
+        self.detents = detents
+        self.selectedIndex = selectedIndex
+        self.select = select
+        super.init()
     }
 }
 
