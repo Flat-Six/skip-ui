@@ -22,10 +22,21 @@ public struct Spring : Hashable {
 
     // SKIP @bridge
     public init(duration: TimeInterval = 0.5, bounce: Double = 0.0) {
+        // A spring, as SwiftUI's is (Flat-Six patch): stiffness (2π / duration)², the damping ratio 1 − bounce
+        // (1 / (1 + bounce) below zero). Skip ran a tween with a back easing, which pulls the value back before it moves
+        // and overshoots after: an expanding card shrank before it grew
         #if SKIP
-        animationSpec = TweenSpec(durationMillis: Int(duration * 1000.0), easing: EaseInOutBack)
+        animationSpec = Spring.springSpec(response: duration, dampingRatio: bounce >= 0.0 ? 1.0 - bounce : 1.0 / (1.0 + bounce))
         #endif
     }
+
+    #if SKIP
+    /// A spring of the given response (its period undamped) and damping ratio, its mass 1.
+    private static func springSpec(response: Double, dampingRatio: Double) -> AnimationSpec<Any> {
+        let omega = 6.283185307179586 / max(response, 0.001)   // 2π / response
+        return SpringSpec(dampingRatio: Float(max(dampingRatio, 0.001)), stiffness: Float(omega * omega))
+    }
+    #endif
 
     @available(*, unavailable)
     public var duration: TimeInterval {
@@ -40,7 +51,7 @@ public struct Spring : Hashable {
     // SKIP @bridge
     public init(response: Double, dampingRatio: Double) {
         #if SKIP
-        animationSpec = TweenSpec(durationMillis: Int(response * 1000.0), easing: EaseInOutBack)
+        animationSpec = Spring.springSpec(response: response, dampingRatio: dampingRatio)   // a spring (Flat-Six patch)
         #endif
     }
 
@@ -79,8 +90,13 @@ public struct Spring : Hashable {
 
     // SKIP @bridge
     public init(settlingDuration: TimeInterval, dampingRatio: Double, epsilon: Double = 0.001) {
+        // A spring that settles within epsilon in that time (Flat-Six patch): its envelope decays as e^(−ζω₀t)
         #if SKIP
-        animationSpec = TweenSpec(durationMillis: Int(settlingDuration * 1000.0), easing: EaseInOutBack)
+        let ratio = max(dampingRatio, 0.001)
+        // −ln ε, for the epsilon given (6.9 for the default 0.001), within a tenth of the settling over 1e-5…1e-1
+        let decades = epsilon >= 0.01 ? 4.6 : (epsilon >= 0.001 ? 6.9 : 9.2)
+        let omega = decades / (min(ratio, 1.0) * max(settlingDuration, 0.001))
+        animationSpec = Spring.springSpec(response: 6.283185307179586 / omega, dampingRatio: ratio)
         #endif
     }
 
@@ -106,7 +122,7 @@ public struct Spring : Hashable {
 
     // SKIP @bridge
     public static func snappy(duration: TimeInterval = 0.5, extraBounce: Double = 0.0) -> Spring {
-        return Spring(duration: duration, bounce: extraBounce)
+        return Spring(duration: duration, bounce: 0.15 + extraBounce)   // snappy's own bounce, as SwiftUI's (Flat-Six patch)
     }
 
     // SKIP @bridge
@@ -116,7 +132,7 @@ public struct Spring : Hashable {
 
     // SKIP @bridge
     public static func bouncy(duration: TimeInterval = 0.5, extraBounce: Double = 0.0) -> Spring {
-        return Spring(duration: duration, bounce: extraBounce)
+        return Spring(duration: duration, bounce: 0.3 + extraBounce)   // bouncy's own bounce, as SwiftUI's (Flat-Six patch)
     }
 }
 
