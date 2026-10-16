@@ -715,6 +715,12 @@ extension EnvironmentValues {
         set { setBuiltinValue(key: "_flexibleWidthModifier", value: newValue, defaultValue: { nil }) }
     }
 
+    /// The enclosing container's report of its content's flexibility, filled as the content composes (Flat-Six patch).
+    var _flexibleReport: FlexibleReport? {
+        get { builtinValue(key: "_flexibleReport", defaultValue: { nil }) as! FlexibleReport? }
+        set { setBuiltinValue(key: "_flexibleReport", value: newValue, defaultValue: { nil }) }
+    }
+
     var _foregroundStyle: ShapeStyle? {
         get { builtinValue(key: "_foregroundStyle", defaultValue: { nil }) as! ShapeStyle? }
         // Avoid recursive foreground style lookup

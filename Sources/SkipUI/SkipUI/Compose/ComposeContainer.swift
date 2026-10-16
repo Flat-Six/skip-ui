@@ -56,10 +56,20 @@ private func composeFlexibleMergedMax(_ current: Float?, _ proposed: Float?) -> 
     // Use remembered flexible values to recompose on change
     let contentFlexibleWidthMax = remember { mutableStateOf(flexibleWidthMax ?? initialContentFlexibleWidthMax) }
     let contentFlexibleHeightMax = remember { mutableStateOf(flexibleHeightMax) }
+    // What the content says of its flexibility as it composes, applied as the parent measures until the values above
+    // catch up — a composition later, a level of nesting at a time (Flat-Six patch: Skip/FlexibleReport.kt)
+    let report = remember { FlexibleReport() }
 
     // Create the correct modifier for the current values and content
     var modifier = modifier
     let inheritedLayoutScrollAxes = EnvironmentValues.shared._layoutScrollAxes
+    report.parent = EnvironmentValues.shared._flexibleReport
+    report.forwardsWidth = !fixedWidth && flexibleWidthMax == nil && !inheritedLayoutScrollAxes.contains(Axis.Set.horizontal)
+    report.forwardsHeight = !fixedHeight && flexibleHeightMax == nil && !inheritedLayoutScrollAxes.contains(Axis.Set.vertical)
+    let layoutImplementationVersion = EnvironmentValues.shared._layoutImplementationVersion
+    let deferredWidthMode = deferredFlexibleMode(report.forwardsWidth, EnvironmentValues.shared._flexibleWidth != nil, EnvironmentValues.shared._flexibleWidthModifier != nil, layoutImplementationVersion)
+    let deferredHeightMode = deferredFlexibleMode(report.forwardsHeight, EnvironmentValues.shared._flexibleHeight != nil, EnvironmentValues.shared._flexibleHeightModifier != nil, layoutImplementationVersion)
+    modifier = modifier.deferredFlexible(report, deferredWidthMode, contentFlexibleWidthMax.value, deferredHeightMode, contentFlexibleHeightMax.value)
     var totalLayoutScrollAxes = inheritedLayoutScrollAxes
     if fixedWidth || flexibleWidthMax?.isFlexibleNonExpandingMax == true || flexibleWidthMin?.isFlexibleNonExpandingMin == true || axis == .vertical {
         totalLayoutScrollAxes.remove(Axis.Set.horizontal)
@@ -120,10 +130,12 @@ private func composeFlexibleMergedMax(_ current: Float?, _ proposed: Float?) -> 
         $0.set_flexibleWidthModifier(nil)
         $0.set_flexibleHeightModifier(nil)
         $0.set_horizontalStackVerticalAlignmentKey(nil)
+        $0.set_flexibleReport(report)
 
         // Set the 'flexibleWidth' and 'flexibleHeight' blocks to trigger a side effect to update our container's expansion state, which
         // can cause it to recompose and recalculate its own modifier. We must use `SideEffect` or the recomposition never happens
         $0.set_flexibleWidth { ideal, min, max in
+            report.reportWidth(max)
             var defaultModifier: Modifier = Modifier
             if max?.isFlexibleExpanding == true {
                 if max == Float.flexibleFill {
@@ -152,6 +164,7 @@ private func composeFlexibleMergedMax(_ current: Float?, _ proposed: Float?) -> 
                 ?? defaultModifier.applyNonExpandingFlexibleWidth(ideal: ideal, min: min, max: max)
         }
         $0.set_flexibleHeight { ideal, min, max in
+            report.reportHeight(max)
             var defaultModifier: Modifier = Modifier
             if max?.isFlexibleExpanding == true {
                 if max == Float.flexibleFill {
@@ -183,6 +196,7 @@ private func composeFlexibleMergedMax(_ current: Float?, _ proposed: Float?) -> 
     } in: {
         // Render the container content with the above environment setup
         content(modifier)
+        report.hasComposed = true
     }
 }
 #endif
