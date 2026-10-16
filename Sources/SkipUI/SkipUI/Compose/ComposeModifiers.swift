@@ -245,7 +245,10 @@ class OpacityModifier : DrawModifier {
 
     // SKIP DECLARE: override fun ContentDrawScope.draw()
     override func draw() {
-        let value = opacity()
+        // Within 0…1, as SwiftUI keeps it (Flat-Six patch): a spring heading for 0 dips below it as it settles, and
+        // the paint's alpha, an unclamped byte, wrapped round to nearly opaque — what had faded out flashed back for a
+        // frame at the end of an expanding transition, and of its reverse
+        let value = max(Float(0.0), min(Float(1.0), opacity()))
         let paint = Paint().apply {
             alpha = value
         }
