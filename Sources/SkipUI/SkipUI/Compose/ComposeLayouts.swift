@@ -218,8 +218,17 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
     // high, a strip of the stack's ground under it at the foot. Each expansion rounded as Compose rounds the padding it
     // undoes, not truncated (Flat-Six patch): a bar's 257.5 px took 258 of padding and gave back 257, a pixel's line of
     // what is behind at the screen's edge
-    let slotTop = slotState.value?.top ?? safeArea.safeBoundsPx.top
-    let slotBottom = slotState.value?.bottom ?? safeArea.safeBoundsPx.bottom
+    // The top and bottom kept as where the slot lay against the safe area's edges (Flat-Six patch): a navigation
+    // stack moves its content's box and the safe area it gives it together — a bar shown or hidden, the room reserved for
+    // one dropped — so the slot is where it now is in the same pass. Kept as places in the window, the slot was learnt a
+    // frame late: a full-screen view ignoring the safe area sat a top bar's height off for the first frames of an
+    // animated transition, and jumped back as the slot was learnt again.
+    var slotTop = safeArea.safeBoundsPx.top
+    var slotBottom = safeArea.safeBoundsPx.bottom
+    if let slot = slotState.value {
+        slotTop += slot.top
+        slotBottom += slot.bottom
+    }
     // An adjacent view reaches from its slot all the way to the edge: a slot a pixel under the safe area's edge (whole
     // pixels under a half-pixel inset) left that pixel's line of what was behind
     var expansionTop = 0
@@ -263,8 +272,9 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
         return ComposeResult.ok
     } in: {
         Layout(modifier: modifier.onGloballyPositionedInWindow {
-            // where the parent put the view: across, the view keeps its slot (below)
-            let slot = $0
+            // where the parent put the view: across, the view keeps its slot (below); its top and bottom as where they lie
+            // against the safe area's (above)
+            let slot = Rect(top: $0.top - safeArea.safeBoundsPx.top, left: $0.left, bottom: $0.bottom - safeArea.safeBoundsPx.bottom, right: $0.right)
             let known = slotState.value
             if known == nil || abs(known!.left - slot.left) > Float(0.5) || abs(known!.right - slot.right) > Float(0.5) || abs(known!.top - slot.top) > Float(0.5) || abs(known!.bottom - slot.bottom) > Float(0.5) {
                 slotState.value = slot

@@ -344,9 +344,22 @@ extension View {
         return self
     }
 
-    @available(*, unavailable)
-    public func containerBackground(_ style: any ShapeStyle, for container: ContainerBackgroundPlacement) -> some View {
+    /// A navigation stack's page in the given style (Flat-Six patch): the stack paints it in place of the system
+    /// background — `.clear` lets what lies behind the stack show through it. Other containers are not painted.
+    public func containerBackground(_ style: any ShapeStyle, for container: ContainerBackgroundPlacement) -> any View {
+        #if SKIP
+        guard container == ContainerBackgroundPlacement.navigation else {
+            return self
+        }
+        return preference(key: ToolbarPreferenceKey.self, value: ToolbarPreferences(navigationBackground: style))
+        #else
         return self
+        #endif
+    }
+
+    // SKIP @bridge
+    public func containerBackground(_ style: any ShapeStyle, bridgedPlacement: Int) -> any View {
+        return containerBackground(style, for: ContainerBackgroundPlacement(identifier: bridgedPlacement))
     }
 
     @available(*, unavailable)

@@ -440,7 +440,9 @@ public struct NavigationStack : View, Renderable {
                     // If there is a custom color scheme, we also always show any custom background even when unscrolled, because we can't
                     // properly interpolate between the title text colors
                     let topBarHasColorScheme = topBarPreferences?.colorScheme != nil
-                    let isSystemBackground = topBarPreferences?.isSystemBackground == true || reservesInitialRootTopBar
+                    // Not for room only reserved on a root's first pass (Flat-Six patch): an empty bar painted its ground
+                    // over what lay under it until the preferences came — a grey band over a full-screen view as it was put up
+                    let isSystemBackground = topBarPreferences?.isSystemBackground == true
                     if topBarPreferences?.backgroundVisibility == Visibility.hidden {
                         topBarBackgroundColor = androidx.compose.ui.graphics.Color.Transparent
                         unscrolledTopBarBackgroundColor = androidx.compose.ui.graphics.Color.Transparent
@@ -776,7 +778,18 @@ public struct NavigationStack : View, Renderable {
             }
         } else {
             // New Box layout (version >= 2)
-            Box(modifier: modifier.background(Color.background.colorImpl()).fillMaxSize()) {
+            // The page's background (Flat-Six patch): `containerBackground(_:for: .navigation)`'s, else the system's —
+            // and none on a root's first pass, before its content's preferences have come: a page that asked for none
+            // showed the system's for its first frames (white over the view beneath as it was put up)
+            let pageBackground: androidx.compose.ui.graphics.Color
+            if let style = arguments.toolbarPreferences.navigationBackground {
+                pageBackground = style.asColor(opacity: 1.0, animationContext: nil) ?? Color.background.colorImpl()
+            } else if isInitialRootPreferencePass.value {
+                pageBackground = androidx.compose.ui.graphics.Color.Transparent
+            } else {
+                pageBackground = Color.background.colorImpl()
+            }
+            Box(modifier: modifier.background(pageBackground).fillMaxSize()) {
                 // Calculate safe area for content by insetting by topBar and bottomBar heights
                 var contentSafeArea: SafeArea?
                 if let safeArea = arguments.safeArea {
@@ -834,7 +847,9 @@ public struct NavigationStack : View, Renderable {
                     topBarUnderlayColor = nil
                 } else if topBarPreferences?.backgroundVisibility == Visibility.visible {
                     topBarUnderlayColor = topBarPreferences?.background?.asColor(opacity: 1.0, animationContext: nil) ?? Color.systemBarBackground.colorImpl()
-                } else if topBarPreferences?.isSystemBackground == true || reservesInitialRootTopBar {
+                } else if topBarPreferences?.isSystemBackground == true {
+                    // Not for room only reserved on a root's first pass (Flat-Six patch): a bar may never come, and the
+                    // band painted over what lay under it — grey over a full-screen view as it was put up
                     topBarUnderlayColor = Color.systemBarBackground.colorImpl()
                 } else {
                     topBarUnderlayColor = nil
@@ -893,6 +908,18 @@ public struct NavigationStack : View, Renderable {
                     if area.safeBoundsPx.bottom > boxBottomPx {
                         var (safeLeft, safeTop, safeRight, safeBottom) = area.safeBoundsPx
                         safeBottom = boxBottomPx
+                        contentSafeArea = SafeArea(presentation: area.presentationBoundsPx, safe: Rect(top: safeTop, left: safeLeft, bottom: safeBottom, right: safeRight), absoluteSystemBars: area.absoluteSystemBarEdges)
+                    }
+                }
+                // And at the top (Flat-Six patch): with no top bar the system's inset pads the box there too, and a safe
+                // area that began at the presentation's top told a child ignoring it that it was already there — a
+                // full-screen view sat a status bar low as it was put up, and a top bar's height low for the first frame
+                // of an animated transition.
+                if !isPresentedAsSheet && !showsTopBar && arguments.ignoresSafeAreaEdges.contains(.top), let area = contentSafeArea {
+                    let boxTopPx = area.presentationBoundsPx.top + with(density) { topPadding.toPx() }
+                    if area.safeBoundsPx.top < boxTopPx {
+                        var (safeLeft, safeTop, safeRight, safeBottom) = area.safeBoundsPx
+                        safeTop = boxTopPx
                         contentSafeArea = SafeArea(presentation: area.presentationBoundsPx, safe: Rect(top: safeTop, left: safeLeft, bottom: safeBottom, right: safeRight), absoluteSystemBars: area.absoluteSystemBarEdges)
                     }
                 }
