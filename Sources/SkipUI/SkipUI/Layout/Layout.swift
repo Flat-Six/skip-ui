@@ -1,6 +1,45 @@
 // Copyright 2023–2026 Skip
 // SPDX-License-Identifier: MPL-2.0
 #if !SKIP_BRIDGE
+#if SKIP
+import SkipModel
+import androidx.compose.runtime.Composable
+#endif
+
+/// A view laid out by a custom SwiftUI `Layout` (SkipSwiftUI's, Flat-Six patch). `layout` is the layout itself, run
+/// in Swift on each layout pass (CustomLayout.kt says what it is asked and answers); `animatableValue` its animatable
+/// data, animated here as an animatable modifier's value is and handed to `layout` as the layout measures.
+// SKIP @bridge
+public struct CustomLayout : View, Renderable {
+    let content: ComposeBuilder
+    let animatableValue: Double
+    let layout: ([Double]) -> [Double]
+    #if SKIP
+    let animTx: StateMutationTransaction?
+    #endif
+
+    // SKIP @bridge
+    public init(animatableValue: Double, layout: @escaping ([Double]) -> [Double], bridgedContent: any View) {
+        #if SKIP
+        self.animTx = StateTracking.captureLastReadAndClear()
+        #endif
+        self.content = ComposeBuilder.from { bridgedContent }
+        self.animatableValue = animatableValue
+        self.layout = layout
+    }
+
+    #if SKIP
+    @Composable override func Render(context: ComposeContext) {
+        let renderables = content.Evaluate(context: context, options: 0).filter { !$0.isSwiftUIEmptyView }
+        let progress = Float(animatableValue).asAnimatable(context: context, animTx: animTx)
+        CustomLayoutContent(modifier: context.modifier, renderables: renderables, context: context.content(), progress: progress, swiftLayout: layout)
+    }
+    #else
+    public var body: some View {
+        stubView()
+    }
+    #endif
+}
 
 public enum LayoutDirection : Int, Hashable, CaseIterable {
     case leftToRight = 0 // For bridging
