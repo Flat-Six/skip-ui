@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
 import kotlin.math.abs
 import androidx.compose.ui.unit.dp
@@ -190,16 +191,6 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
     // state to our output to ensure we aren't re-calling the target block when output hasn't changed
     let edgesState = remember { mutableStateOf(checkEdges) }
     let edges = edgesState.value
-    // Each expansion rounded as Compose rounds the padding it undoes, not truncated (Flat-Six patch): a bar's 257.5 px
-    // took 258 of padding and gave back 257, a pixel's line of what is behind at the screen's edge
-    var expansionTop = 0
-    if expandInto.contains(Edge.Set.top) && edges.contains(Edge.Set.top) {
-        expansionTop = Int((safeArea.safeBoundsPx.top - safeArea.presentationBoundsPx.top).rounded())
-    }
-    var expansionBottom = 0
-    if expandInto.contains(Edge.Set.bottom) && edges.contains(Edge.Set.bottom) {
-        expansionBottom = Int((safeArea.presentationBoundsPx.bottom - safeArea.safeBoundsPx.bottom).rounded())
-    }
     // The sides as SwiftUI has them (Flat-Six patch): a view reaches from where its parent put it to the
     // presentation's edge — not the whole inset again from wherever it is, which took a view already at the edge (inside
     // one that ignored the safe area) past it — and the safe area at the sides goes on to its content whole, where Skip
@@ -208,6 +199,23 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
     let slotState = remember { mutableStateOf<Rect?>(nil) }
     let slotLeft = slotState.value?.left ?? safeArea.safeBoundsPx.left
     let slotRight = slotState.value?.right ?? safeArea.safeBoundsPx.right
+    // The top and bottom reached from the slot as well (Flat-Six patch): a view the parent had already put up in the
+    // status bar's band reached the whole band again above that — a view beside a column on a phone on its side 100 px
+    // high, a strip of the stack's ground under it at the foot. Each expansion rounded as Compose rounds the padding it
+    // undoes, not truncated (Flat-Six patch): a bar's 257.5 px took 258 of padding and gave back 257, a pixel's line of
+    // what is behind at the screen's edge
+    let slotTop = slotState.value?.top ?? safeArea.safeBoundsPx.top
+    let slotBottom = slotState.value?.bottom ?? safeArea.safeBoundsPx.bottom
+    // An adjacent view reaches from its slot all the way to the edge: a slot a pixel under the safe area's edge (whole
+    // pixels under a half-pixel inset) left that pixel's line of what was behind
+    var expansionTop = 0
+    if expandInto.contains(Edge.Set.top) && edges.contains(Edge.Set.top) {
+        expansionTop = Int(max(Float(0.0), slotTop - safeArea.presentationBoundsPx.top).rounded())
+    }
+    var expansionBottom = 0
+    if expandInto.contains(Edge.Set.bottom) && edges.contains(Edge.Set.bottom) {
+        expansionBottom = Int(max(Float(0.0), safeArea.presentationBoundsPx.bottom - slotBottom).rounded())
+    }
     let isRTL = LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     let leftEdge: Edge.Set = isRTL ? Edge.Set.trailing : Edge.Set.leading
     let rightEdge: Edge.Set = isRTL ? Edge.Set.leading : Edge.Set.trailing
@@ -244,7 +252,7 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
             // where the parent put the view: across, the view keeps its slot (below)
             let slot = $0
             let known = slotState.value
-            if known == nil || abs(known!.left - slot.left) > Float(0.5) || abs(known!.right - slot.right) > Float(0.5) {
+            if known == nil || abs(known!.left - slot.left) > Float(0.5) || abs(known!.right - slot.right) > Float(0.5) || abs(known!.top - slot.top) > Float(0.5) || abs(known!.bottom - slot.bottom) > Float(0.5) {
                 slotState.value = slot
             }
             let probeEdges = expandInto.union(checkEdges)
@@ -279,9 +287,19 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
             let reachX = expansionLeft + expansionRight
             let fillsWidth = reachX > 0 && constraints.hasBoundedWidth && first.width >= updatedConstraints.maxWidth
             let width = fillsWidth ? constraints.constrainWidth(first.width - reachX) : first.width
-            layout(width: width, height: first.height) {
-                // Layout will center extra space by default (the top and bottom)
-                let relativeTop = expansionTop - ((expansionTop + expansionBottom) / 2)
+            // Down, likewise (Flat-Six patch): content that took the height offered keeps the slot and runs out past it
+            // by what it reached, placed there outright — Skip reported the reached height and left Compose to centre it on
+            // the slot, which put it where it belonged only from a slot between the bars. Content that did not take it is
+            // placed where Compose's centring of an oversized node put it, the size reported within the constraints: an
+            // oversized node is read back where the centring moved it, not where the parent put it, and the reach from that
+            // slot shrank, pass on pass, until the content sat a status bar low.
+            let reachY = expansionTop + expansionBottom
+            let fillsHeight = reachY > 0 && constraints.hasBoundedHeight && first.height >= updatedConstraints.maxHeight
+            let height = fillsHeight ? constraints.constrainHeight(first.height - reachY) : constraints.constrainHeight(first.height)
+            let centring = fillsHeight ? 0 : (first.height - height) / 2
+            layout(width: width, height: height) {
+                // Layout will center extra space by default (the top and bottom of content that did not fill)
+                let relativeTop = fillsHeight ? expansionTop : centring + expansionTop - ((expansionTop + expansionBottom) / 2)
                 let expansionLeading = isRTL ? expansionRight : expansionLeft
                 let x = fillsWidth ? -expansionLeading : 0
                 for targetPlaceable in targetPlaceables {
@@ -294,7 +312,10 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
 
 private func adjacentSafeAreaEdges(bounds: Rect, safeArea: SafeArea, isRTL: Bool, checkEdges: Edge.Set, bottomTolerancePx: Float = Float(0.1)) -> Edge.Set {
     var edges: Edge.Set = []
-    if checkEdges.contains(Edge.Set.top), bounds.top <= safeArea.safeBoundsPx.top + 0.1 {
+    // a few pixels' tolerance at the top (Flat-Six patch): parents place at whole pixels under half-pixel insets, and
+    // a view's ground, put at 258 under a safe area's 257.5 — at 259 with the keyboard up — was taken for clear of it
+    // and never reached up under the bar above; a view really clear of the edge sits a bar's height lower
+    if checkEdges.contains(Edge.Set.top), bounds.top <= safeArea.safeBoundsPx.top + 3.0 {
         edges.insert(Edge.Set.top)
     }
     if checkEdges.contains(Edge.Set.bottom), bounds.bottom >= safeArea.safeBoundsPx.bottom - bottomTolerancePx {
