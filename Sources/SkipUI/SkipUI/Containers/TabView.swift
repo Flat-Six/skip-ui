@@ -577,7 +577,7 @@ public struct TabView : View, Renderable {
                                     if let area = contentSafeArea {
                                         let paddedTopPx = area.presentationBoundsPx.top + with(density) { topPadding.toPx() }
                                         if area.safeBoundsPx.top < paddedTopPx {
-                                            contentSafeArea = SafeArea(presentation: area.presentationBoundsPx, safe: Rect(top: paddedTopPx, left: area.safeBoundsPx.left, bottom: area.safeBoundsPx.bottom, right: area.safeBoundsPx.right), absoluteSystemBars: area.absoluteSystemBarEdges)
+                                            contentSafeArea = SafeArea(presentation: area.presentationBoundsPx, safe: Rect(top: paddedTopPx, left: area.safeBoundsPx.left, bottom: area.safeBoundsPx.bottom, right: area.safeBoundsPx.right), absoluteSystemBars: area.absoluteSystemBarEdges, keyboard: area.keyboardPx)
                                         }
                                     }
                                     if tabNavLeadingEndPx.value > Float(0.0) {

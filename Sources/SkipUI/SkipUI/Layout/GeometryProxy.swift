@@ -89,7 +89,7 @@ public struct GeometryProxy {
             return EdgeInsets(
                 top: Double((safe.top - presentation.top).toDp().value),
                 leading: Double((safe.left - presentation.left).toDp().value),
-                bottom: Double((presentation.bottom - safe.bottom).toDp().value),
+                bottom: Double((presentation.bottom + safeArea.keyboardPx - safe.bottom).toDp().value),   // the keyboard the safe area's (Flat-Six patch)
                 trailing: Double((presentation.right - safe.right).toDp().value)
             )
         }

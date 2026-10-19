@@ -34,10 +34,16 @@ struct SafeArea: Equatable, CustomStringConvertible {
     /// The edges whose safe area is solely due to system bars.
     let absoluteSystemBarEdges: Edge.Set
 
-    init(presentation: Rect, safe: Rect, absoluteSystemBars: Edge.Set = []) {
+    /// How far the keyboard reaches below the presentation's bottom (Flat-Six patch): the presentation root is padded up
+    /// by the keyboard, so its bounds end at the keyboard's top, and the keyboard is the safe area's below them — as iOS
+    /// has it, where the keyboard is a safe-area region and a view's size and its insets add up to the window either way.
+    let keyboardPx: Float
+
+    init(presentation: Rect, safe: Rect, absoluteSystemBars: Edge.Set = [], keyboard: Float = Float(0.0)) {
         self.presentationBoundsPx = presentation
         self.safeBoundsPx = safe
         self.absoluteSystemBarEdges = absoluteSystemBars
+        self.keyboardPx = keyboard
     }
 
     /// Update the safe area.
@@ -61,11 +67,11 @@ struct SafeArea: Equatable, CustomStringConvertible {
             safeRight = value
             systemBarEdges.remove(.trailing)
         }
-        return SafeArea(presentation: presentationBoundsPx, safe: Rect(top: safeTop, left: safeLeft, bottom: safeBottom, right: safeRight), absoluteSystemBars: systemBarEdges)
+        return SafeArea(presentation: presentationBoundsPx, safe: Rect(top: safeTop, left: safeLeft, bottom: safeBottom, right: safeRight), absoluteSystemBars: systemBarEdges, keyboard: keyboardPx)
     }
-    
+
     var description: String {
-        "SafeArea(presentationBoundsPx: \(presentationBoundsPx), safeBoundsPx: \(safeBoundsPx), absoluteSystemBarEdges: \(absoluteSystemBarEdges))"
+        "SafeArea(presentationBoundsPx: \(presentationBoundsPx), safeBoundsPx: \(safeBoundsPx), absoluteSystemBarEdges: \(absoluteSystemBarEdges), keyboardPx: \(keyboardPx))"
     }
 }
 #endif

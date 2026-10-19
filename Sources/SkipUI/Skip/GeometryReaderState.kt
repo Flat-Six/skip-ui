@@ -30,17 +30,42 @@ internal class GeometryReaderState {
     val globalFramePx: Rect get() = frame.value
     val insetsPx: GeometryReaderInsets get() = insets.value
 
-    /** Measured size remains valid even when an ancestor clips the global bounding rectangle. */
+    /** The latest composition's safe area: the one the next layout is padded by (Flat-Six patch, update). */
+    private var composedArea: SafeArea? = null
+
+    /**
+     * Measured size remains valid even when an ancestor clips the global bounding rectangle. The insets come with it
+     * (Flat-Six patch): the safe area of the composition this layout follows, as iOS gives a reader its size and its
+     * insets at once. Taken apart, a size a layout old met the next composition's insets, and while the keyboard slid
+     * the window they added up to moved by the slide's step for a frame.
+     */
     fun update(size: IntSize, frame: Rect) {
         layout.value = Layout(size, frame)
+        insets.value = insetsOf(composedArea)
     }
 
-    /** Compare inset distances, while other safe-area consumers retain their absolute bounds. */
+    /**
+     * The composition's safe area, kept for the layout that follows (update) — and the insets at once for a reader not
+     * yet laid out. Compare inset distances, while other safe-area consumers retain their absolute bounds.
+     */
     fun updateSafeArea(area: SafeArea?) {
-        insets.value = if (area == null) GeometryReaderInsets() else GeometryReaderInsets(
+        composedArea = area
+        if (layout.value == null) {
+            insets.value = insetsOf(area)
+        }
+    }
+
+    /**
+     * The bottom is measured from the window's bottom (Flat-Six patch): the keyboard counted as the safe area's, as iOS
+     * counts it, so a reader's size and its insets add up to the window with the keyboard up as with it down — they had
+     * come to the window less the keyboard, and a window told as tablet-like by its size stopped being so as the
+     * keyboard came up, its form made anew and its field's focus lost (an opened Fold could not be typed on).
+     */
+    private fun insetsOf(area: SafeArea?): GeometryReaderInsets {
+        return if (area == null) GeometryReaderInsets() else GeometryReaderInsets(
             top = area.safeBoundsPx.top - area.presentationBoundsPx.top,
             left = area.safeBoundsPx.left - area.presentationBoundsPx.left,
-            bottom = area.presentationBoundsPx.bottom - area.safeBoundsPx.bottom,
+            bottom = area.presentationBoundsPx.bottom + area.keyboardPx - area.safeBoundsPx.bottom,
             right = area.presentationBoundsPx.right - area.safeBoundsPx.right
         )
     }

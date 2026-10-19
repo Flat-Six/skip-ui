@@ -266,7 +266,7 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
     safeBottom += expansionBottom
 
     let contentSafeBounds = Rect(top: safeTop, left: safeLeft, bottom: safeBottom, right: safeRight)
-    let contentSafeArea = SafeArea(presentation: safeArea.presentationBoundsPx, safe: contentSafeBounds, absoluteSystemBars: safeArea.absoluteSystemBarEdges)
+    let contentSafeArea = SafeArea(presentation: safeArea.presentationBoundsPx, safe: contentSafeBounds, absoluteSystemBars: safeArea.absoluteSystemBarEdges, keyboard: safeArea.keyboardPx)
     EnvironmentValues.shared.setValues {
         $0.set_safeArea(contentSafeArea)
         return ComposeResult.ok

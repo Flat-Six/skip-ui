@@ -908,7 +908,7 @@ public struct NavigationStack : View, Renderable {
                     if area.safeBoundsPx.bottom > boxBottomPx {
                         var (safeLeft, safeTop, safeRight, safeBottom) = area.safeBoundsPx
                         safeBottom = boxBottomPx
-                        contentSafeArea = SafeArea(presentation: area.presentationBoundsPx, safe: Rect(top: safeTop, left: safeLeft, bottom: safeBottom, right: safeRight), absoluteSystemBars: area.absoluteSystemBarEdges)
+                        contentSafeArea = SafeArea(presentation: area.presentationBoundsPx, safe: Rect(top: safeTop, left: safeLeft, bottom: safeBottom, right: safeRight), absoluteSystemBars: area.absoluteSystemBarEdges, keyboard: area.keyboardPx)
                     }
                 }
                 // And at the top (Flat-Six patch): with no top bar the system's inset pads the box there too, and a safe
@@ -920,7 +920,7 @@ public struct NavigationStack : View, Renderable {
                     if area.safeBoundsPx.top < boxTopPx {
                         var (safeLeft, safeTop, safeRight, safeBottom) = area.safeBoundsPx
                         safeTop = boxTopPx
-                        contentSafeArea = SafeArea(presentation: area.presentationBoundsPx, safe: Rect(top: safeTop, left: safeLeft, bottom: safeBottom, right: safeRight), absoluteSystemBars: area.absoluteSystemBarEdges)
+                        contentSafeArea = SafeArea(presentation: area.presentationBoundsPx, safe: Rect(top: safeTop, left: safeLeft, bottom: safeBottom, right: safeRight), absoluteSystemBars: area.absoluteSystemBarEdges, keyboard: area.keyboardPx)
                     }
                 }
                 Box(modifier: contentModifier, contentAlignment: androidx.compose.ui.Alignment.Center) {

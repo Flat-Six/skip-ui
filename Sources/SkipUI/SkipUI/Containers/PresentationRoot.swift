@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -43,11 +43,17 @@ import androidx.compose.ui.platform.LocalLayoutDirection
             // strip down the cutout's side of every page in landscape (Flat-Six patch).
             // The ground behind the keyboard the page's, not black: Gboard leaves a cutout's side bare, a black strip beside
             // it in landscape where iOS's keyboard spans the screen (Flat-Six patch)
+            // The keyboard's inset, read in this composition (Flat-Six patch): the root's padding and the safe area's keyboard
+            // both from it, so the two move in one frame, and a reader's size and insets with them (SafeArea.keyboardPx,
+            // GeometryReaderState) — imePadding() read the inset as the layout ran, a frame ahead of the safe area made in
+            // composition: an opened Fold8 on its side added up a window 281 tall the frame its keyboard came in, under 600,
+            // so no longer tablet-like, its form made anew and its field's focus lost, the keyboard gone again
+            let keyboardPx = systemBarEdges.contains(.bottom) ? WindowInsets.ime.getBottom(density) : 0
             var rootModifier = Modifier
                 .background(backgroundColor != nil ? androidx.compose.ui.graphics.Color.Transparent : Color.background.colorImpl())
                 .fillMaxSize()
             if systemBarEdges.contains(.bottom) {
-                rootModifier = rootModifier.imePadding()
+                rootModifier = rootModifier.padding(bottom: with(density) { keyboardPx.toDp() })
             }
             // Resolve adaptive colors under this presentation's preferred color scheme.
             rootModifier = rootModifier.background((backgroundColor ?? Color.background).colorImpl())
@@ -64,7 +70,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
                     safeTop += WindowInsets.safeDrawing.getTop(density)
                 }
                 if systemBarEdges.contains(.bottom) {
-                    safeBottom -= max(0, WindowInsets.safeDrawing.getBottom(density) - WindowInsets.ime.getBottom(density))
+                    safeBottom -= max(0, WindowInsets.safeDrawing.getBottom(density) - keyboardPx)
                 }
                 let isRTL = layoutDirection == androidx.compose.ui.unit.LayoutDirection.Rtl
                 if systemBarEdges.contains(isRTL ? Edge.Set.trailing : Edge.Set.leading) {
@@ -74,7 +80,9 @@ import androidx.compose.ui.platform.LocalLayoutDirection
                     safeRight -= WindowInsets.safeDrawing.getRight(density, layoutDirection)
                 }
                 let safeBounds = Rect(left: safeLeft, top: safeTop, right: safeRight, bottom: safeBottom)
-                let safeArea = SafeArea(presentation: presentationBounds.value, safe: safeBounds, absoluteSystemBars: systemBarEdges)
+                // How far the keyboard reaches below the presentation (Flat-Six patch): the root's padding, as read above —
+                // so the presentation's bounds, a layout behind as the keyboard moves, cancel from what a reader is told
+                let safeArea = SafeArea(presentation: presentationBounds.value, safe: safeBounds, absoluteSystemBars: systemBarEdges, keyboard: Float(keyboardPx))
                 EnvironmentValues.shared.setValues {
                     // Detect whether the app is edge to edge mode based on whether it has a safe area at any edge
                     if $0._isEdgeToEdge == nil {
