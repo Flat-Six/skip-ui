@@ -457,11 +457,14 @@ public struct TabView : View, Renderable {
                                         // across 820, 243 across 1133, 254 across 1180), the title at 13, regular (Flat-Six patch)
                                         let inline = EnvironmentValues.shared.horizontalSizeClass == UserInterfaceSizeClass.regular || EnvironmentValues.shared.verticalSizeClass == UserInterfaceSizeClass.compact
                                         let visibleCount = max(1, tabs.filter { $0 != nil && $0?.isHidden != true }.size)
+                                        // 32 in a compact height — a phone on its side — as UIKit's (Flat-Six patch: at 49,
+                                        // 17 points more of a short window than an iPhone gives up; REVIEW.md S1)
+                                        let tabBarHeight = EnvironmentValues.shared.verticalSizeClass == UserInterfaceSizeClass.compact ? 32.dp : 49.dp
                                         Column(modifier: options.modifier.semantics { testTagsAsResourceId = true }.testTag("skip_ui_automation_tab_bar").fillMaxWidth().background(options.containerColor)) {
                                             Box(modifier: Modifier.fillMaxWidth().height(0.33.dp).background(hairline))
                                             BoxWithConstraints(modifier: Modifier.fillMaxWidth()) {
                                             let slot = maxWidth * Float(0.868) / Float(visibleCount)
-                                            let rowModifier = inline ? Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets.only(WindowInsetsSides.Bottom)).height(49.dp) : Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets.only(WindowInsetsSides.Bottom)).absolutePadding(left: sideLeft, right: sideRight).height(49.dp)
+                                            let rowModifier = inline ? Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets.only(WindowInsetsSides.Bottom)).height(tabBarHeight) : Modifier.fillMaxWidth().windowInsetsPadding(NavigationBarDefaults.windowInsets.only(WindowInsetsSides.Bottom)).absolutePadding(left: sideLeft, right: sideRight).height(tabBarHeight)
                                             Row(modifier: rowModifier, horizontalArrangement: inline ? Arrangement.Center : Arrangement.Start, verticalAlignment: inline ? androidx.compose.ui.Alignment.CenterVertically : androidx.compose.ui.Alignment.Top) {
                                                 for tabIndex in 0..<tabRenderables.size {
                                                     // A tab from a `false` conditional branch maps to a nil entry above: no slot

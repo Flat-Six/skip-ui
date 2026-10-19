@@ -206,7 +206,13 @@ public struct TextField : View, Renderable {
         
         EnvironmentValues.shared.setValues {
             $0.set_material3Text { options in options.copy(modifier: options.modifier.fillMaxWidth()) }
-            $0.set_foregroundStyle(Color(colorImpl: { Color.primary.colorImpl().copy(alpha: ContentAlpha.disabled) }))
+            // iOS's placeholderText — #3C3C43 at 30% in the light, #EBEBF5 at 30% in the dark (Flat-Six patch): Material's
+            // primary at 38% made a prompt darker than iOS's, #9E9E9E on white for #C5C5C7
+            $0.set_foregroundStyle(Color(colorImpl: {
+                EnvironmentValues.shared.colorScheme == ColorScheme.dark
+                    ? androidx.compose.ui.graphics.Color(red: 0xEB, green: 0xEB, blue: 0xF5, alpha: 0x4D)
+                    : androidx.compose.ui.graphics.Color(red: 0x3C, green: 0x3C, blue: 0x43, alpha: 0x4D)
+            }))
             return ComposeResult.ok
         } in: {
             prompt.Compose(context: context)

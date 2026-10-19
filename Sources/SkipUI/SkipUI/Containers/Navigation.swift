@@ -376,8 +376,12 @@ public struct NavigationStack : View, Renderable {
         modifier = modifier.then(context.modifier)
 
         let shouldReserveInitialTopBarSpace = showTopBar || reservesInitialRootTopBar
-        // iOS's bars (Flat-Six patch): 44 inline, and a large title's 44 + 52 — Material's were 64 and 112
-        let estimatedCollapsedTopBarHeight = 44.dp
+        // iOS's bars (Flat-Six patch): 44 inline, and a large title's 44 + 52 — Material's were 64 and 112. In a compact
+        // height — a phone on its side — 32, as UIKit's bars are there; at 44 a phone on its side kept 12 points less of
+        // its height than an iPhone gives (app/android/REVIEW.md S1)
+        let compactHeight = EnvironmentValues.shared.verticalSizeClass == UserInterfaceSizeClass.compact
+        let barHeight = compactHeight ? 32.dp : 44.dp
+        let estimatedCollapsedTopBarHeight = barHeight
         let estimatedExpandedTopBarHeight = 96.dp
         let estimatedTopBarHeight = isInlineTitleDisplayMode ? estimatedCollapsedTopBarHeight : estimatedExpandedTopBarHeight
         let safeAreaTopPx = arguments.safeArea?.safeBoundsPx.top ?? Float(0.0)
@@ -557,7 +561,7 @@ public struct NavigationStack : View, Renderable {
                                                 let room = (Double(maxWidth.value) + 4.0 - titleWidth) / 2.0 - 34.0 - 8.0
                                                 // a page before titled "" leaves the chevron alone, as on iOS
                                                 let backTitle = previousTitleText != nil && previousTitle.isEmpty ? "" : (!previousTitle.isEmpty && previousWidth <= room ? previousTitle : (backWidth <= room ? "Back" : ""))
-                                                Row(modifier: Modifier.clickable(interactionSource: nil, indication: nil, onClick: { navigator.value.navigateBack() }).height(44.dp).padding(start: 2.dp, end: 8.dp), verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
+                                                Row(modifier: Modifier.clickable(interactionSource: nil, indication: nil, onClick: { navigator.value.navigateBack() }).height(barHeight).padding(start: 2.dp, end: 8.dp), verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
                                                     Icon(imageVector: Icons.AutoMirrored.Filled.ArrowBackIos, contentDescription: "Back", tint: tint.colorImpl(), modifier: Modifier.size(22.dp))
                                                     if !backTitle.isEmpty {
                                                         androidx.compose.material3.Text(text: backTitle, color: tint.colorImpl(), style: labelStyle, maxLines: 1)
@@ -587,8 +591,8 @@ public struct NavigationStack : View, Renderable {
                         // the sides as far as the stack reaches past the safe area there (Flat-Six patch): Material's own
                         // insets know no cutout, and the stack may not touch the window's edge (a column)
                         let topBarWindowInsets = (hasAbsoluteTopSystemBar ? TopAppBarDefaults.windowInsets.only(WindowInsetsSides.Top) : WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)).add(WindowInsets(left: arguments.leftInsetPx, top: 0, right: arguments.rightInsetPx, bottom: 0))
-                        // An inline title's bar at iOS's 44, not Material's 64 (Flat-Six patch)
-                        let inlineTopBarHeight = 44.dp
+                        // An inline title's bar at iOS's 44 (32 in a compact height), not Material's 64 (Flat-Six patch)
+                        let inlineTopBarHeight = barHeight
                         if isInlineTitleDisplayMode {
                             if options.preferCenterAlignedStyle {
                                 CenterAlignedTopAppBar(title: options.title, modifier: options.modifier, navigationIcon: options.navigationIcon, actions: { topBarActions() }, expandedHeight: inlineTopBarHeight, windowInsets: topBarWindowInsets, colors: options.colors, scrollBehavior: options.scrollBehavior)

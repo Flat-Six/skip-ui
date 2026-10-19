@@ -1872,10 +1872,12 @@ final class AnimatedBorderModifier: RenderModifier {
             content.Render(context: context)
             return
         }
+        // At exactly its width, as SwiftUI strokes it (Border.kt): Compose's border rounds a width up to whole pixels
+        let widthPx = with(LocalDensity.current) { animatedWidth.dp.toPx() }
         if let color = style.asColor(opacity: 1.0, animationContext: context) {
-            context.modifier = context.modifier.border(width: animatedWidth.dp, color: color)
+            context.modifier = context.modifier.swiftUIBorder(widthPx: widthPx, brush: androidx.compose.ui.graphics.SolidColor(color))
         } else if let brush = style.asBrush(opacity: 1.0, animationContext: context) {
-            context.modifier = context.modifier.border(BorderStroke(width: animatedWidth.dp, brush: brush))
+            context.modifier = context.modifier.swiftUIBorder(widthPx: widthPx, brush: brush)
         }
         content.Render(context: context)
     }
