@@ -4,6 +4,7 @@
 import Foundation
 #if SKIP
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -383,21 +384,60 @@ func inlineSheetHeight(of detent: PresentationDetent, windowHeight: Float, large
     }
 }
 
-/// The status bar's icons for a light ground (dark icons) or a dark one while composed, and as they were after
-/// (Flat-Six patch): a navigation bar drawn behind the status bar sets them by its colour scheme, as iOS's does.
+/// The status bar's icons as the bars drawn behind it ask (Flat-Six patch): a navigation bar asks for its colour scheme's
+/// icons while it is composed (SyncStatusBarIcons) — dark icons for a light ground, light ones for a dark ground, over a
+/// dark header in the light appearance too, as iOS's — the newest ask holds, and as the last goes, the appearance's own.
+/// Each bar had set the icons as it came and put back what it found as it went, so a bar gone after the next had come put
+/// back the icons from before both, and an appearance changed under a bar left the icons the change's reset gave them —
+/// another scene's or another appearance's, by the order things came in.
+final class StatusBarIconAsks {
+    static var asks: [StatusBarIconAsk] = []
+    static var lastID = 0
+
+    static func newID() -> Int {
+        lastID += 1
+        return lastID
+    }
+}
+
+struct StatusBarIconAsk {
+    let id: Int
+    let window: android.view.Window
+    let lightAppearance: Bool
+}
+
+/// A window's status bar icons as its newest ask says, or as its appearance's own where none asks.
+func applyStatusBarIcons(window: android.view.Window) {
+    var light: Bool? = nil
+    for ask in StatusBarIconAsks.asks {
+        if ask.window === window {
+            light = ask.lightAppearance
+        }
+    }
+    if light == nil {
+        let night = window.context.resources.configuration.uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK
+        light = night != android.content.res.Configuration.UI_MODE_NIGHT_YES
+    }
+    WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = light!
+}
+
+/// A bar's ask for its colour scheme's status bar icons while it is composed (StatusBarIconAsks) — made again when the
+/// appearance changes: the host's configuration change and the theme's bars set the icons to the appearance's own first.
 @Composable func SyncStatusBarIcons(lightAppearance: Bool) {
     let view = LocalView.current
-    DisposableEffect(lightAppearance) {
+    let dark = isSystemInDarkTheme()
+    let id = remember { StatusBarIconAsks.newID() }
+    DisposableEffect(lightAppearance, dark) {
         let window = (view.parent as? DialogWindowProvider)?.window ?? UIApplication.shared.androidActivity?.window
-        var previous: Bool? = nil
         if let window {
-            let controller = WindowCompat.getInsetsController(window, view)
-            previous = controller.isAppearanceLightStatusBars
-            controller.isAppearanceLightStatusBars = lightAppearance
+            StatusBarIconAsks.asks.removeAll { $0.id == id }
+            StatusBarIconAsks.asks.append(StatusBarIconAsk(id: id, window: window, lightAppearance: lightAppearance))
+            applyStatusBarIcons(window: window)
         }
         onDispose {
-            if let window, let previous {
-                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = previous
+            StatusBarIconAsks.asks.removeAll { $0.id == id }
+            if let window {
+                applyStatusBarIcons(window: window)
             }
         }
     }
@@ -411,6 +451,10 @@ func inlineSheetHeight(of detent: PresentationDetent, windowHeight: Float, large
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = !dark
                 isAppearanceLightNavigationBars = !dark
+            }
+            // a bar's ask on the sheet holds over the theme's (StatusBarIconAsks, Flat-Six patch)
+            if StatusBarIconAsks.asks.contains(where: { $0.window === window }) {
+                applyStatusBarIcons(window: window)
             }
         }
         onDispose { }
