@@ -249,11 +249,15 @@ public struct LazyVGrid: View, Renderable {
             default:
                 break
             }
-            Column(verticalArrangement: Arrangement.spacedBy(verticalSpacing.dp), horizontalAlignment: alignment.asComposeAlignment()) {
+            // The columns one group as wide as they are, set by the grid's alignment as a whole, a short last row's
+            // cells in the first columns — SwiftUI's. Rows of their own width in a column of theirs, left at the leading
+            // edge, set a lone card in a column narrower than the grid leading where the grid said centre.
+            let rowWidth = cellWidth * Double(count) + horizontalSpacing * Double(count - 1)
+            Column(modifier: Modifier.fillMaxWidth(), verticalArrangement: Arrangement.spacedBy(verticalSpacing.dp), horizontalAlignment: alignment.asComposeAlignment()) {
                 var index = 0
                 while index < renderables.size {
                     let rowStart = index
-                    Row(horizontalArrangement: Arrangement.spacedBy(horizontalSpacing.dp)) {
+                    Row(modifier: Modifier.width(rowWidth.dp), horizontalArrangement: Arrangement.spacedBy(horizontalSpacing.dp)) {
                         for column in 0..<count {
                             if rowStart + column < renderables.size {
                                 Box(modifier: Modifier.width(cellWidth.dp), contentAlignment: cellAlignment) {

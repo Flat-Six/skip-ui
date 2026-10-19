@@ -189,6 +189,11 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
             let isEdgeToEdge = EnvironmentValues.shared._isEdgeToEdge == true
             let sheetDepth = EnvironmentValues.shared._sheetDepth
             var systemBarEdges: Edge.Set = isFullScreen || isCompactHeight ? .all : [.top, .bottom]
+            // The card's room: the window above its bottom bar — a taskbar, the navigation bar — which a UIKit window has
+            // nothing like. Centred on the whole window, About on the opened Fold8 on its side had its foot behind the
+            // taskbar. Read here, in the sheet's own composition, where its insets are accurate.
+            let cardBottomBar = isCard ? max(0.dp, WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding()) : 0.dp
+            let cardRoomHeight = min(cardHeight, windowHeight - cardBottomBar - 88.dp)
 
             let detentPreferences = rememberSaveable(stateSaver: context.stateSaver as! Saver<Preference<PresentationDetentPreferences>, Any>) { mutableStateOf(Preference<PresentationDetentPreferences>(key: PresentationDetentPreferenceKey.self)) }
             let detentPreferencesCollector = PreferenceCollector<PresentationDetentPreferences>(key: PresentationDetentPreferences.self, state: detentPreferences)
@@ -202,8 +207,8 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
                 // bar at most; around it the window's dim, which dismisses it as iOS's does
                 systemBarEdges = []
                 let keyboardTop = windowHeight - WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-                var top = (windowHeight - cardHeight) / 2
-                let under = top + cardHeight + 16.dp - keyboardTop
+                var top = (windowHeight - cardBottomBar - cardRoomHeight) / 2
+                let under = top + cardRoomHeight + 16.dp - keyboardTop
                 if under > 0.dp {
                     top = max(WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding(), top - under)
                 }
@@ -269,7 +274,7 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
             }
 
             let clipShape = isCard ? RoundedCornerShape(cardCornerRadius.dp) : RoundedCornerShape(topStart: isFullScreen || isCompactHeight ? 0.dp : overlayPresentationCornerRadius.dp, topEnd: isFullScreen || isCompactHeight ? 0.dp : overlayPresentationCornerRadius.dp)
-            let contentModifier = isCard ? Modifier.fillMaxWidth().height(cardHeight).clip(clipShape) : Modifier.weight(Float(1.0)).clip(clipShape)
+            let contentModifier = isCard ? Modifier.fillMaxWidth().height(cardRoomHeight).clip(clipShape) : Modifier.weight(Float(1.0)).clip(clipShape)
             Box(modifier: interactiveDismissDisabled ? contentModifier.nestedScroll(DisableScrollToDismissConnection()) : contentModifier) {
                 // Place outside of PresentationRoot recomposes
                 let stateSaver = remember { ComposeStateSaver() }

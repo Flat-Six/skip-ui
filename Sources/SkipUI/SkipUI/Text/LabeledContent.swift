@@ -4,7 +4,9 @@
 import Foundation
 #if SKIP
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -51,9 +53,19 @@ public struct LabeledContent : View, Renderable {
     }
 
     @Composable private func RenderLabeleledContent(context: ComposeContext) {
+        // SwiftUI's: the value a block at the trailing edge, after a gap, in the secondary style, wrapping in what the
+        // label leaves (its lines as they are). At their own widths the two met — no gap, a long value starting right
+        // after the label — and a value from `init(_:value:)` came in the primary style.
         Row(modifier: context.modifier.fillWidth(), horizontalArrangement: Arrangement.SpaceBetween, verticalAlignment: androidx.compose.ui.Alignment.CenterVertically) {
             RenderLabel(context: context.content())
-            RenderContent(context: context.content())
+            Box(modifier: Modifier.padding(start: 8.dp).weight(Float(1.0), fill: false)) {
+                EnvironmentValues.shared.setValues {
+                    $0.set_foregroundStyle(Color.secondary)
+                    return ComposeResult.ok
+                } in: {
+                    RenderContent(context: context.content())
+                }
+            }
         }
     }
 
