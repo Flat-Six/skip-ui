@@ -145,12 +145,18 @@ public struct Image : View, Renderable, Equatable {
         }
     }
 
+    /// An image's colour with no foreground style set: the primary style's, or in a list's section header its secondary,
+    /// as the header's text takes it (Flat-Six patch: a header link's chevron stood in the primary style)
+    @Composable static func defaultTint() -> androidx.compose.ui.graphics.Color {
+        return EnvironmentValues.shared._listSectionHeaderStyle != nil ? Color.secondary.colorImpl() : Color.primary.colorImpl()
+    }
+
     @Composable private func RenderAssetImage(asset: AssetImageInfo, label: Text?, aspectRatio: Double?, contentMode: ContentMode?, context: ComposeContext) {
         let url = asset.url
         let androidContext = LocalContext.current
 
         let shouldTint = (templateRenderingMode == .template) || (templateRenderingMode == nil && asset.isTemplateImage)
-        let tintColor = shouldTint ? EnvironmentValues.shared._foregroundStyle?.asColor(opacity: 1.0, animationContext: context) ?? Color.primary.colorImpl() : nil
+        let tintColor = shouldTint ? EnvironmentValues.shared._foregroundStyle?.asColor(opacity: 1.0, animationContext: context) ?? Self.defaultTint() : nil
 
         if EnvironmentValues.shared._subcomposeAsyncImage {
             let dm = androidContext.resources.displayMetrics
@@ -392,7 +398,7 @@ public struct Image : View, Renderable, Equatable {
         case Font.Weight.black:      weightPriority = black + heavy + bold + semibold + medium + regular + light + thin + ultraLight
         }
 
-        let tintColor = EnvironmentValues.shared._foregroundStyle?.asColor(opacity: 1.0, animationContext: context) ?? Color.primary.colorImpl()
+        let tintColor = EnvironmentValues.shared._foregroundStyle?.asColor(opacity: 1.0, animationContext: context) ?? Self.defaultTint()
 
         //logger.info("symbolInfos for name=\(name) against weightPriority=\(weightPriority): \(Array(symbolInfos.keys))")
         if let symbolInfo = weightPriority.compactMap({ symbolInfos[$0] }).first {
@@ -466,7 +472,7 @@ public struct Image : View, Renderable, Equatable {
 
     @Composable private func RenderScaledImageVector(image: ImageVector, name: String, sizeRatio: Float = Float(1.0), aspectRatio: Double?, contentMode: ContentMode?, context: ComposeContext) {
 
-        let tintColor = EnvironmentValues.shared._foregroundStyle?.asColor(opacity: 1.0, animationContext: context) ?? Color.primary.colorImpl()
+        let tintColor = EnvironmentValues.shared._foregroundStyle?.asColor(opacity: 1.0, animationContext: context) ?? Self.defaultTint()
         switch resizingMode {
         case .stretch:
             let painter = rememberVectorPainter(image)

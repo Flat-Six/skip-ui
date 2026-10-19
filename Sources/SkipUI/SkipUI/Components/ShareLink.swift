@@ -130,12 +130,17 @@ public final class ShareLink : View, Renderable {
         if let message, !message.localizedTextString().isEmpty {
             shared = message.localizedTextString() + "\n" + text
         }
+        // The sheet's preview shows the title over the text, where iOS's shows the name alone: a text that starts
+        // with the subject goes without the title, or the name reads twice (a place's name, then its message)
+        let subjectString = subject?.localizedTextString()
         let intent = Intent().apply {
             action = Intent.ACTION_SEND
             putExtra(Intent.EXTRA_TEXT, shared)
-            if let subject {
-                putExtra(Intent.EXTRA_SUBJECT, subject.localizedTextString())
-                putExtra(Intent.EXTRA_TITLE, subject.localizedTextString())
+            if let subjectString {
+                putExtra(Intent.EXTRA_SUBJECT, subjectString)
+                if !shared.hasPrefix(subjectString) {
+                    putExtra(Intent.EXTRA_TITLE, subjectString)
+                }
             }
             type = "text/plain"
         }

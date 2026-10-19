@@ -243,6 +243,10 @@ public struct Button : View, Renderable {
     ///   - action: Pass nil if the given modifier already includes `clickable`
     @Composable static func RenderTextButton(label: View, context: ComposeContext, role: ButtonRole? = nil, isPlain: Bool = false, isEnabled: Bool = EnvironmentValues.shared.isEnabled, action: (() -> Void)? = nil) {
         let isHitTestingEnabled = EnvironmentValues.shared._isHitTestingEnabled
+        // A plain button in a list's section header leaves its label in the header's style, as SwiftUI's plain button
+        // takes its surroundings' (Flat-Six patch): the primary style set here outranked the header's own, and a
+        // header's link read as a row's
+        let inheritsHeader = isPlain && isEnabled && role != .destructive && EnvironmentValues.shared._foregroundStyle == nil && EnvironmentValues.shared._listSectionHeaderStyle != nil
         var foregroundStyle: ShapeStyle
         if role == .destructive {
             foregroundStyle = Color(colorImpl: { MaterialTheme.colorScheme.error })
@@ -260,6 +264,10 @@ public struct Button : View, Renderable {
         }
         let contentContext = context.content(modifier: modifier)
 
+        if inheritsHeader {
+            label.Compose(context: contentContext)
+            return
+        }
         EnvironmentValues.shared.setValues {
             $0.set_foregroundStyle(foregroundStyle)
             return ComposeResult.ok
