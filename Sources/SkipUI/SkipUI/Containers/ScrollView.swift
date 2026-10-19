@@ -349,17 +349,17 @@ extension View {
     public func contentMargins(_ edges: Edge.Set = .all, _ insets: EdgeInsets, for placement: ContentMarginPlacement = .automatic) -> some View {
         #if SKIP
         // Skip does not display scroll indicators, so .scrollIndicators placement is a no-op
-        let margins: ContentMargins
-        switch placement {
-        case .automatic:
-            margins = ContentMargins(automatic: insets)
-        case .scrollContent:
-            margins = ContentMargins(scrollContent: insets)
-        case .scrollIndicators:
-            // No-op: SkipUI doesn't have visible scroll indicators on Android
+        if placement == .scrollIndicators {
             return self
         }
-        return environment(\._contentMargins, margins, affectsEvaluate: false)
+        // The named edges only, the others as an outer call left them: SwiftUI's nested margins, the innermost winning
+        // edge by edge. Set whole, a `.leading` inside a `.trailing` took the trailing margin away, and a list's own
+        // `.top` a container's sides.
+        return ModifiedContent(content: self, modifier: EnvironmentModifier(affectsEvaluate: false) { environment in
+            let margins = environment._contentMargins ?? ContentMargins()
+            environment.set_contentMargins(margins.setting(edges, insets, for: placement))
+            return ComposeResult.ok
+        })
         #else
         return self
         #endif

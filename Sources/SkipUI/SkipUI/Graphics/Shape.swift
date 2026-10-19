@@ -194,6 +194,10 @@ public struct ModifiedShape : Shape {
             if stroke.isInset, let style = stroke.style {
                 inset = with(density) { (style.lineWidth / 2.0).dp.toPx() }
             }
+            // A stroke of no width draws nothing in SwiftUI; Android's canvas draws a width of 0 as a hairline
+            if let style = stroke.style, style.lineWidth <= 0.0 {
+                continue
+            }
             strokeBrushes.append((brush, drawStyle, inset))
         }
 

@@ -1867,6 +1867,11 @@ final class AnimatedBorderModifier: RenderModifier {
         // Apply the border with animated width
         // ShapeStyle animation is handled by asBrush/asColor via animationContext
         var context = context
+        // A border of no width draws nothing in SwiftUI; Compose's 0.dp is its hairline
+        if animatedWidth <= Float(0.0) {
+            content.Render(context: context)
+            return
+        }
         if let color = style.asColor(opacity: 1.0, animationContext: context) {
             context.modifier = context.modifier.border(width: animatedWidth.dp, color: color)
         } else if let brush = style.asBrush(opacity: 1.0, animationContext: context) {

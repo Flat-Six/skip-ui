@@ -626,14 +626,14 @@ struct _Text: View, Renderable, Equatable {
                 overflow: {
                     let singleLine = (maxLines == 1) || options.softWrap == false
                     switch truncationMode {
-                    case .tail:
-                        return TextOverflow.Ellipsis
                     case .head:
                         return singleLine ? TextOverflow.StartEllipsis : TextOverflow.Ellipsis
                     case .middle:
                         return singleLine ? TextOverflow.MiddleEllipsis : TextOverflow.Ellipsis
                     default:
-                        return TextOverflow.Clip
+                        // .tail, and no mode set: SwiftUI truncates at the tail unless told otherwise, so a line-limited
+                        // text ends in "…" (clipped, a one-line text broke at its last whole word and said nothing)
+                        return TextOverflow.Ellipsis
                     }
                 }()
             )

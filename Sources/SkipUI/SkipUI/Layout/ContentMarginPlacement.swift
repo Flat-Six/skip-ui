@@ -38,6 +38,26 @@ public struct ContentMargins {
         }
     }
 
+    /// These margins with the given edges of a placement set to the insets', its other edges as they were — how SwiftUI
+    /// composes nested `contentMargins`, the innermost winning edge by edge. An automatic margin is every placement's,
+    /// so it sets those edges of a placement's own margin too; a placement's own starts from the automatic one.
+    public func setting(_ edges: Edge.Set, _ insets: EdgeInsets, for placement: ContentMarginPlacement) -> ContentMargins {
+        switch placement {
+        case .automatic:
+            return ContentMargins(automatic: (automatic ?? EdgeInsets()).replacing(edges, with: insets),
+                                  scrollContent: scrollContent?.replacing(edges, with: insets),
+                                  scrollIndicators: scrollIndicators?.replacing(edges, with: insets))
+        case .scrollContent:
+            return ContentMargins(automatic: automatic,
+                                  scrollContent: (scrollContent ?? automatic ?? EdgeInsets()).replacing(edges, with: insets),
+                                  scrollIndicators: scrollIndicators)
+        case .scrollIndicators:
+            return ContentMargins(automatic: automatic,
+                                  scrollContent: scrollContent,
+                                  scrollIndicators: (scrollIndicators ?? automatic ?? EdgeInsets()).replacing(edges, with: insets))
+        }
+    }
+
     #if SKIP
     /// Converts the content margins to Compose PaddingValues for the given placement.
     func asComposePaddingValues(for placement: ContentMarginPlacement) -> PaddingValues? {
@@ -52,6 +72,16 @@ public struct ContentMargins {
         )
     }
     #endif
+}
+
+extension EdgeInsets {
+    /// These insets with the given edges taken from the other's.
+    func replacing(_ edges: Edge.Set, with other: EdgeInsets) -> EdgeInsets {
+        return EdgeInsets(top: edges.contains(.top) ? other.top : top,
+                          leading: edges.contains(.leading) ? other.leading : leading,
+                          bottom: edges.contains(.bottom) ? other.bottom : bottom,
+                          trailing: edges.contains(.trailing) ? other.trailing : trailing)
+    }
 }
 
 #endif
