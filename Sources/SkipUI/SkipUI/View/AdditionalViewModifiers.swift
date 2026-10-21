@@ -1036,26 +1036,30 @@ extension View {
     // SKIP @bridge
     public func onGeometryChangeErased<T>(of transform: @escaping (GeometryProxy) -> T, action: @escaping (_ oldValue: T, _ newValue: T) -> Void) -> any View {
         #if SKIP
+        // The action called once the frame's layout is done (Flat-Six patch), with the frame's last geometry
+        // (GeometryChangeDelivery). Kept as a state the layout wrote, it reached the action a composition later
+        // (SideEffect), and the action's own state change a composition after that: a view laid out by its measured
+        // width was drawn twice wrong after a resize, and a turn settled a pass later for every one inside another.
+        // And the composition read the layout's state, so the view was made again whenever it moved, a scroll's every
+        // frame.
         return ModifiedContent(content: self, modifier: RenderModifier { renderable, context in
-            let geometry = remember { GeometryReaderState() }
             let storage = remember { GeometryChangeValueStorage() }
+            let delivery = rememberGeometryChangeDelivery()
             let density = LocalDensity.current
             let safeArea = EnvironmentValues.shared._safeArea
 
-            if geometry.isPositioned {
-                let proxy = GeometryProxy(sizePx: geometry.sizePx, globalFramePx: geometry.globalFramePx, density: density, safeArea: safeArea)
-                let newValue = transform(proxy)
-                let oldValue = storage.previousValue as? T
-                if oldValue == nil || oldValue != newValue {
-                    let effectiveOldValue = oldValue ?? newValue
-                    storage.previousValue = newValue
-                    SideEffect { action(effectiveOldValue, newValue) }
-                }
-            }
-
             var updatedContext = context
             updatedContext.modifier = context.modifier.onGloballyPositioned {
-                geometry.update(size: $0.size, frame: $0.boundsInRoot())
+                let proxy = GeometryProxy(sizePx: $0.size, globalFramePx: $0.boundsInRoot(), density: density, safeArea: safeArea)
+                delivery.offer(proxy) { latest in
+                    let newValue = transform(latest as! GeometryProxy)
+                    let oldValue = storage.previousValue as? T
+                    if oldValue == nil || oldValue != newValue {
+                        let effectiveOldValue = oldValue ?? newValue
+                        storage.previousValue = newValue
+                        action(effectiveOldValue, newValue)
+                    }
+                }
             }
             renderable.Render(context: updatedContext)
         })

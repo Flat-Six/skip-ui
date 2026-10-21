@@ -19,6 +19,8 @@ public struct GeometryProxy {
     let density: Density
     private let safeArea: SafeArea?
     private let geometry: GeometryReaderState?
+    private let readerSizePx: IntSize?
+    private let readerInsetsPx: GeometryReaderInsets?
 
     /// Fixed snapshots are still used by onGeometryChange's transform/action contract.
     init(sizePx: IntSize, globalFramePx: Rect, density: Density, safeArea: SafeArea?) {
@@ -27,6 +29,8 @@ public struct GeometryProxy {
         self.density = density
         self.safeArea = safeArea
         self.geometry = nil
+        self.readerSizePx = nil
+        self.readerInsetsPx = nil
     }
 
     /// Reader proxies defer snapshot observation to the properties their content accesses.
@@ -36,6 +40,20 @@ public struct GeometryProxy {
         self.density = density
         self.safeArea = nil
         self.geometry = geometry
+        self.readerSizePx = nil
+        self.readerInsetsPx = nil
+    }
+
+    /// A reader made with the size it is laid out at (Flat-Six patch): its size and its insets this frame's, the frame
+    /// still the reader's last layout, read as its content asks for it.
+    init(geometry: GeometryReaderState, sizePx: IntSize, insetsPx: GeometryReaderInsets, density: Density) {
+        self.fixedSizePx = sizePx
+        self.fixedGlobalFramePx = Rect.Zero
+        self.density = density
+        self.safeArea = nil
+        self.geometry = geometry
+        self.readerSizePx = sizePx
+        self.readerInsetsPx = insetsPx
     }
 
     private var globalFramePx: Rect {
@@ -46,7 +64,7 @@ public struct GeometryProxy {
     public var size: CGSize {
         #if SKIP
         // Root bounds can be clipped by a scroll viewport; size describes the full layout.
-        let size = geometry?.sizePx ?? fixedSizePx
+        let size = readerSizePx ?? geometry?.sizePx ?? fixedSizePx
         return with(density) {
             CGSize(width: Double(size.width.toDp().value), height: Double(size.height.toDp().value))
         }
@@ -75,7 +93,7 @@ public struct GeometryProxy {
     public var safeAreaInsets: EdgeInsets {
         #if SKIP
         if let geometry {
-            let insets = geometry.insetsPx
+            let insets = readerInsetsPx ?? geometry.insetsPx
             return with(density) {
                 EdgeInsets(top: Double(insets.top.toDp().value), leading: Double(insets.left.toDp().value), bottom: Double(insets.bottom.toDp().value), trailing: Double(insets.right.toDp().value))
             }
