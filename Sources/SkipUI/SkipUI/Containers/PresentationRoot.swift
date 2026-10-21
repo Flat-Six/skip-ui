@@ -21,12 +21,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import kotlin.math.abs
 
 /// The root of a presentation, such as the root presentation or a sheet.
-@Composable public func PresentationRoot(defaultColorScheme: ColorScheme? = nil, backgroundColor: Color? = nil, absoluteSystemBarEdges systemBarEdges: Edge.Set = .all, context: ComposeContext, content: @Composable (ComposeContext) -> Void) {
+///
+/// - Parameter followsWindow: Whether the presentation fills its activity's window, so that after a resize its bounds and
+///     insets are the window's as the window manager has them — false for a sheet, which has bounds of its own.
+@Composable public func PresentationRoot(defaultColorScheme: ColorScheme? = nil, backgroundColor: Color? = nil, absoluteSystemBarEdges systemBarEdges: Edge.Set = .all, followsWindow: Bool = true, context: ComposeContext, content: @Composable (ComposeContext) -> Void) {
     launchUIApplicationActivity()
 
     let preferredColorScheme = rememberSaveable(stateSaver: context.stateSaver as! Saver<Preference<PreferredColorScheme>, Any>) { mutableStateOf(Preference<PreferredColorScheme>(key: PreferredColorSchemePreferenceKey.self)) }
@@ -49,6 +54,11 @@ import androidx.compose.ui.platform.LocalLayoutDirection
             // composition: an opened Fold8 on its side added up a window 281 tall the frame its keyboard came in, under 600,
             // so no longer tablet-like, its form made anew and its field's focus lost, the keyboard gone again
             let keyboardPx = systemBarEdges.contains(.bottom) ? WindowInsets.ime.getBottom(density) : 0
+            // The window as the window manager has it, read again at each configuration (Flat-Six patch): for a
+            // presentation filling it, its bounds and insets in the first frame of a resize (below)
+            let configuration = LocalConfiguration.current
+            let androidContext = LocalContext.current
+            let window = followsWindow ? remember(configuration) { windowNow(androidContext) } : nil
             var rootModifier = Modifier
                 .background(backgroundColor != nil ? androidx.compose.ui.graphics.Color.Transparent : Color.background.colorImpl())
                 .fillMaxSize()
@@ -65,30 +75,50 @@ import androidx.compose.ui.platform.LocalLayoutDirection
                     return
                 }
                 // Cannot get accurate WindowInsets until we're in the content box
-                var (safeLeft, safeTop, safeRight, safeBottom) = presentationBounds.value
+                var bounds = presentationBounds.value
+                var insetTop = WindowInsets.safeDrawing.getTop(density)
+                var insetBottom = WindowInsets.safeDrawing.getBottom(density)
+                var insetLeft = WindowInsets.safeDrawing.getLeft(density, layoutDirection)
+                var insetRight = WindowInsets.safeDrawing.getRight(density, layoutDirection)
+                // The first frame of a resize — a turn, a fold — in the window it is drawn in (Flat-Six patch): the bounds
+                // are learnt from the layout before, and the insets come as the views are laid out, a frame after this
+                // composition, so the whole presentation was made for the old window first — a turned phone's portrait
+                // bounds and insets in its landscape window, every view laid out from them wrong, then put right a frame
+                // at a time. A presentation that filled the window (at its origin, its bounds unlike the window's now)
+                // takes the window's bounds and insets from the window manager, which has them as the configuration changes
+                if let window, bounds.left == Float(0.0) && bounds.top == Float(0.0) && (abs(bounds.width - window.widthPx) > Float(0.5) || abs(bounds.height + Float(keyboardPx) - window.heightPx) > Float(0.5)) {
+                    bounds = Rect(left: Float(0.0), top: Float(0.0), right: window.widthPx, bottom: window.heightPx - Float(keyboardPx))
+                    insetTop = Int(window.topPx)
+                    insetBottom = max(Int(window.bottomPx), keyboardPx)
+                    insetLeft = Int(window.leftPx)
+                    insetRight = Int(window.rightPx)
+                }
+                var (safeLeft, safeTop, safeRight, safeBottom) = bounds
                 if systemBarEdges.contains(.top) {
-                    safeTop += WindowInsets.safeDrawing.getTop(density)
+                    safeTop += insetTop
                 }
                 if systemBarEdges.contains(.bottom) {
-                    safeBottom -= max(0, WindowInsets.safeDrawing.getBottom(density) - keyboardPx)
+                    safeBottom -= max(0, insetBottom - keyboardPx)
                 }
                 let isRTL = layoutDirection == androidx.compose.ui.unit.LayoutDirection.Rtl
                 if systemBarEdges.contains(isRTL ? Edge.Set.trailing : Edge.Set.leading) {
-                    safeLeft += WindowInsets.safeDrawing.getLeft(density, layoutDirection)
+                    safeLeft += insetLeft
                 }
                 if systemBarEdges.contains(isRTL ? Edge.Set.leading : Edge.Set.trailing) {
-                    safeRight -= WindowInsets.safeDrawing.getRight(density, layoutDirection)
+                    safeRight -= insetRight
                 }
                 let safeBounds = Rect(left: safeLeft, top: safeTop, right: safeRight, bottom: safeBottom)
                 // How far the keyboard reaches below the presentation (Flat-Six patch): the root's padding, as read above —
                 // so the presentation's bounds, a layout behind as the keyboard moves, cancel from what a reader is told
-                let safeArea = SafeArea(presentation: presentationBounds.value, safe: safeBounds, absoluteSystemBars: systemBarEdges, keyboard: Float(keyboardPx))
+                let safeArea = SafeArea(presentation: bounds, safe: safeBounds, absoluteSystemBars: systemBarEdges, keyboard: Float(keyboardPx))
                 EnvironmentValues.shared.setValues {
                     // Detect whether the app is edge to edge mode based on whether it has a safe area at any edge
                     if $0._isEdgeToEdge == nil {
-                        $0.set_isEdgeToEdge(safeBounds != presentationBounds.value)
+                        $0.set_isEdgeToEdge(safeBounds != bounds)
                     }
                     $0.set_safeArea(safeArea)
+                    $0.set_layoutBoxPx(safeBounds)   // the content, padded by the safe area (Flat-Six patch: IgnoresSafeAreaLayout)
+                    $0.set_windowTopInsetPx(followsWindow ? Float(insetTop) : nil)   // (Flat-Six patch: Navigation's top bar)
                     // A presentation is a new layout root: scroll axes inherited from the presenting
                     // context (e.g. a sheet presented from a button inside a ScrollView) must not
                     // leak in. Otherwise expanding content in the presentation is sized with

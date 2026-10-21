@@ -178,7 +178,7 @@ public struct NavigationStack : View, Renderable {
             // edge, as iOS's under a phone's notch, the pages' content and the bars' buttons in from it by as much
             var ignoresSafeAreaEdges: Edge.Set = [.top, .bottom, .leading, .trailing]
             ignoresSafeAreaEdges.formIntersection(safeArea?.absoluteSystemBarEdges ?? [])
-            IgnoresSafeAreaLayout(expandInto: ignoresSafeAreaEdges, checkEdges: ignoresSafeAreaEdges, logTag: "NavigationStack") { expansion, _ in
+            IgnoresSafeAreaLayout(expandInto: ignoresSafeAreaEdges, checkEdges: ignoresSafeAreaEdges, insetsContentSides: true, logTag: "NavigationStack") { expansion, _ in
                 ComposeContainer(modifier: context.modifier, fillWidth: true, fillHeight: true) { modifier in
                     let decoratorList = listOf(rememberSaveableStateHolderNavEntryDecorator<NavKey>())
                     let entryProvider = entryProvider {
@@ -389,7 +389,8 @@ public struct NavigationStack : View, Renderable {
         // The bar's own top inset (Flat-Six patch): where it draws the status bar's (at the screen's top system bar,
         // Material's window insets), the window's — which a container ignoring the safe area had taken out of the safe
         // area: the bar ended at 142 + 115 px while its content was told 115, and slid 27 px down
-        let topBarInsetPx = hasAbsoluteTopSystemBar ? max(safeAreaTopPx, Float(TopAppBarDefaults.windowInsets.getTop(density))) : safeAreaTopPx
+        let windowTopInsetPx = EnvironmentValues.shared._windowTopInsetPx ?? Float(TopAppBarDefaults.windowInsets.getTop(density))   // this frame's window (Flat-Six patch)
+        let topBarInsetPx = hasAbsoluteTopSystemBar ? max(safeAreaTopPx, windowTopInsetPx) : safeAreaTopPx
         let estimatedTopBarBottomPx = shouldReserveInitialTopBarSpace ? with(density) { topBarInsetPx + estimatedTopBarHeight.toPx() } : Float(0.0)
         let estimatedTopBarBottomInPresentationPx = max(Float(0.0), estimatedTopBarBottomPx - presentationTopPx)
         let topBarBottomPx = remember { mutableStateOf(estimatedTopBarBottomInPresentationPx) }
@@ -619,19 +620,24 @@ public struct NavigationStack : View, Renderable {
             }
         }
 
-        let bottomBarTopPx = remember { mutableStateOf(Float(0.0)) }
+        // The bottom bar's top kept as how far it rises from the presentation's bottom, and the bar's room taken as this
+        // composition shows it or not (Flat-Six patch): kept as a place in the window, the bar's top was learnt a layout
+        // late — after a turn the portrait bar's top lay below the landscape window and the content's safe area reached
+        // past the screen — and a bar this composition hid kept its room until its SideEffect, after the frame
+        let bottomBarRisePx = remember { mutableStateOf(Float(0.0)) }
+        let presentationBottomPx = arguments.safeArea?.presentationBoundsPx.bottom ?? Float(0.0)
+        let showsBottomBar = bottomBarPreferences?.visibility != Visibility.hidden && (bottomItems.size > 0 || bottomBarPreferences?.visibility == Visibility.visible)
+        let bottomBarTopPx: Float = showsBottomBar && bottomBarRisePx.value > Float(0.0) ? presentationBottomPx - bottomBarRisePx.value : Float(0.0)
         let bottomBarHeightPx = remember { mutableStateOf(Float(0.0)) }
         let bottomBar: @Composable () -> Void = {
             guard bottomBarPreferences?.visibility != Visibility.hidden else {
                 SideEffect {
-                    bottomBarTopPx.value = Float(0.0)
                     bottomBarHeightPx.value = Float(0.0)
                 }
                 return
             }
             guard bottomItems.size > 0 || bottomBarPreferences?.visibility == Visibility.visible else {
                 SideEffect {
-                    bottomBarTopPx.value = Float(0.0)
                     bottomBarHeightPx.value = Float(0.0)
                 }
                 return
@@ -678,7 +684,7 @@ public struct NavigationStack : View, Renderable {
                 } in: {
                     var bottomBarModifier = Modifier.zIndex(Float(1.1))
                         .onGloballyPositionedInWindow { bounds in
-                            bottomBarTopPx.value = bounds.top
+                            bottomBarRisePx.value = presentationBottomPx - bounds.top
                             bottomBarHeightPx.value = bounds.bottom - bounds.top
                         }
                     if showScrolledBackground, let bottomBarBackgroundForBrush {
@@ -729,11 +735,11 @@ public struct NavigationStack : View, Renderable {
                 // Calculate safe area for content
                 let contentSafeArea = arguments.safeArea?
                     .insetting(.top, to: effectiveTopBarBottomPx)
-                    .insetting(.bottom, to: bottomBarTopPx.value)
+                    .insetting(.bottom, to: bottomBarTopPx)
                 // Inset manually for any edge where our container ignored the safe area, but we aren't showing a bar
                 let topPadding = effectiveTopBarBottomPx <= Float(0.0) && arguments.ignoresSafeAreaEdges.contains(.top) ? WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding() : 0.dp
                 var bottomPadding = 0.dp
-                if bottomBarTopPx.value <= Float(0.0) && arguments.ignoresSafeAreaEdges.contains(.bottom) {
+                if bottomBarTopPx <= Float(0.0) && arguments.ignoresSafeAreaEdges.contains(.bottom) {
                     bottomPadding = max(0.dp, WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding())
                 }
                 let contentModifier = Modifier.fillMaxWidth().weight(Float(1.0)).padding(top: topPadding, bottom: bottomPadding)
@@ -800,7 +806,7 @@ public struct NavigationStack : View, Renderable {
                     let clampedTopBarBottomPxValue: Float = max(effectiveTopBarBottomPx, safeArea.safeBoundsPx.top)
                     contentSafeArea = safeArea
                         .insetting(.top, to: clampedTopBarBottomPxValue)
-                        .insetting(.bottom, to: bottomBarTopPx.value)
+                        .insetting(.bottom, to: bottomBarTopPx)
                 }
 
                 // Top bar aligned to top

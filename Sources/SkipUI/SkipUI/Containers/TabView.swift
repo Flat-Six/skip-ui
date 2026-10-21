@@ -286,14 +286,29 @@ public struct TabView : View, Renderable {
         let tabViewSafeAreaState = rememberUpdatedState(safeArea)
         let density = LocalDensity.current
         let defaultBottomBarHeight = 80.dp
-        let bottomBarTopPx = remember {
+        // The bar's top kept as how far it rises from the presentation's bottom, and as how tall a bar it was then — 32 in a
+        // compact height, 49 else (Flat-Six patch): kept as a place in the window it was learnt a layout late, and after a
+        // turn the portrait bar's top lay below the landscape window, the tabs' safe area reaching past the screen
+        let bottomBarRisePx = remember {
             // Default our initial value to the expected value, which helps avoid visual artifacts as we measure actual values and
             // recompose with adjusted layouts
-            if let safeArea {
-                mutableStateOf(with(density) { safeArea.presentationBoundsPx.bottom - defaultBottomBarHeight.toPx() })
+            if safeArea != nil {
+                mutableStateOf(with(density) { defaultBottomBarHeight.toPx() })
             } else {
                 mutableStateOf(Float(0.0))
             }
+        }
+        let compactBarNow = EnvironmentValues.shared.verticalSizeClass == UserInterfaceSizeClass.compact
+        let bottomBarCompact = remember { mutableStateOf(compactBarNow) }
+        // the bar's top in the window now, from how far it rises (0: no bar) — read as an entry composes, the entries
+        // keeping their content across compositions
+        let bottomBarTopNow: @Composable (SafeArea?) -> Float = { area in
+            guard bottomBarRisePx.value > Float(0.0), let area else {
+                return Float(0.0)
+            }
+            let compactNow = EnvironmentValues.shared.verticalSizeClass == UserInterfaceSizeClass.compact
+            let change = bottomBarCompact.value == compactNow ? Float(0.0) : with(density) { (compactNow ? -17.dp : 17.dp).toPx() }
+            return area.presentationBoundsPx.bottom - (bottomBarRisePx.value + change)
         }
         let bottomBarHeightPx = remember { mutableStateOf(with(density) { defaultBottomBarHeight.toPx() }) }
         let tabNavLeadingEndPx = remember { mutableStateOf(Float(0.0)) }
@@ -309,9 +324,13 @@ public struct TabView : View, Renderable {
         // iOS's under a phone's notch, its tabs and the tabs' content in from it by as much
         var ignoresSafeAreaEdges: Edge.Set = [.bottom, .top, .leading, .trailing]
         ignoresSafeAreaEdges.formIntersection(safeArea?.absoluteSystemBarEdges ?? [])
-        IgnoresSafeAreaLayout(expandInto: ignoresSafeAreaEdges, checkEdges: ignoresSafeAreaEdges, logTag: "TabView") { expansion, _ in
+        IgnoresSafeAreaLayout(expandInto: ignoresSafeAreaEdges, checkEdges: ignoresSafeAreaEdges, insetsContentSides: true, logTag: "TabView") { expansion, _ in
             let sideLeft = with(density) { expansion.left.toDp() }
             let sideRight = with(density) { expansion.right.toDp() }
+            // The sides as they are now, for the entries (Flat-Six patch): an entry, kept with its tab's back stack, kept the
+            // sides of the composition it was made in — its content not kept in from a cutout after a turn from upright, kept
+            // in from one no longer there after a turn back
+            let sidesState = rememberUpdatedState((sideLeft, sideRight))
             ComposeContainer(modifier: context.modifier, fillWidth: true, fillHeight: true) { modifier in
                 // Don't use a Scaffold: it clips content beyond its bounds and prevents .ignoresSafeArea modifiers from working
                 Box(modifier: modifier.background(Color.background.colorImpl()).fillMaxSize()) {
@@ -329,7 +348,7 @@ public struct TabView : View, Renderable {
                         navigationSuite: {
                             guard tabs.any({ $0 != nil }) && reducedTabBarPreferences.visibility != Visibility.hidden else {
                                 SideEffect {
-                                    bottomBarTopPx.value = Float(0.0)
+                                    bottomBarRisePx.value = Float(0.0)
                                     bottomBarHeightPx.value = Float(0.0)
                                     tabNavLeadingEndPx.value = Float(0.0)
                                 }
@@ -339,15 +358,16 @@ public struct TabView : View, Renderable {
                                 .onGloballyPositionedInWindow { bounds in
                                     let lt = layoutTypeState.value
                                     if lt == NavigationSuiteType.NavigationBar {
-                                        bottomBarTopPx.value = bounds.top
+                                        bottomBarRisePx.value = (safeArea?.presentationBoundsPx.bottom ?? bounds.bottom) - bounds.top
+                                        bottomBarCompact.value = compactBarNow
                                         bottomBarHeightPx.value = bounds.bottom - bounds.top
                                         tabNavLeadingEndPx.value = Float(0.0)
                                     } else if lt == NavigationSuiteType.NavigationRail {
-                                        bottomBarTopPx.value = Float(0.0)
+                                        bottomBarRisePx.value = Float(0.0)
                                         bottomBarHeightPx.value = Float(0.0)
                                         tabNavLeadingEndPx.value = bounds.right
                                     } else {
-                                        bottomBarTopPx.value = Float(0.0)
+                                        bottomBarRisePx.value = Float(0.0)
                                         bottomBarHeightPx.value = Float(0.0)
                                         tabNavLeadingEndPx.value = Float(0.0)
                                     }
@@ -567,12 +587,12 @@ public struct TabView : View, Renderable {
                                     // Inset manually where our container ignored the safe area, but we aren't showing a bar
                                     let topPadding = ignoresSafeAreaEdges.contains(.top) ? WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding() : 0.dp
                                     var bottomPadding = 0.dp
-                                    if bottomBarTopPx.value <= Float(0.0) && ignoresSafeAreaEdges.contains(.bottom) {
+                                    if bottomBarTopNow(tabViewSafeAreaState.value) <= Float(0.0) && ignoresSafeAreaEdges.contains(.bottom) {
                                         bottomPadding = max(0.dp, WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() - WindowInsets.ime.asPaddingValues().calculateBottomPadding())
                                     }
-                                    let contentModifier = Modifier.fillMaxSize().padding(top: topPadding, bottom: bottomPadding).absolutePadding(left: sideLeft, right: sideRight)
+                                    let contentModifier = Modifier.fillMaxSize().padding(top: topPadding, bottom: bottomPadding).absolutePadding(left: sidesState.value.0, right: sidesState.value.1)
                                     let tabViewSafeArea = tabViewSafeAreaState.value
-                                    var contentSafeArea = tabViewSafeArea?.insetting(Edge.bottom, to: bottomBarTopPx.value)
+                                    var contentSafeArea = tabViewSafeArea?.insetting(Edge.bottom, to: bottomBarTopNow(tabViewSafeArea))
                                     // The content starts below the system bar, padded down even when a container above
                                     // already ignored the safe area (and the tab view had nothing to extend into): its safe
                                     // area must start there too, as it does when the tab view extends itself, or a

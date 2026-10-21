@@ -281,7 +281,7 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
                 let presentationContext = context.content(stateSaver: stateSaver)
                 // Place inside of ModalBottomSheet, which renders content async
                 ElevatedPresentationTheme(isElevated: !isFullScreen) {
-                PresentationRoot(backgroundColor: presentationColor, context: presentationContext, absoluteSystemBarEdges: systemBarEdges) { context in
+                PresentationRoot(backgroundColor: presentationColor, context: presentationContext, absoluteSystemBarEdges: systemBarEdges, followsWindow: false) { context in
                     EnvironmentValues.shared.setValues {
                         if !isFullScreen {
                             $0.set_sheetDepth(sheetDepth + 1)
@@ -357,7 +357,7 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
             let stateSaver = remember { ComposeStateSaver() }
             let presentationContext = context.content(stateSaver: stateSaver)
             ElevatedPresentationTheme(isElevated: true) {
-            PresentationRoot(backgroundColor: presentationColor, context: presentationContext, absoluteSystemBarEdges: isEdgeToEdge ? Edge.Set.bottom : Edge.Set(rawValue: 0)) { context in
+            PresentationRoot(backgroundColor: presentationColor, context: presentationContext, absoluteSystemBarEdges: isEdgeToEdge ? Edge.Set.bottom : Edge.Set(rawValue: 0), followsWindow: false) { context in
                 EnvironmentValues.shared.setValues {
                     $0.set_sheetDepth(sheetDepth + 1)
                     $0.setdismiss(DismissAction(action: { isPresented.set(false) }))

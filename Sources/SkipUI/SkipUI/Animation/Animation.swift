@@ -658,7 +658,8 @@ public enum AnimationCompletionCriteria : Hashable {
     // value, because the powering state value will be at its target when we return to the composition
     // SKIP NOWARN
     let resetValue = rememberSaveable(stateSaver: context.stateSaver as Saver<T?, Any>) { mutableStateOf<T?>(nil) }
-    let animatable = remember { Animatable(resetValue.value ?? value, converter) }
+    let holder = remember { AnimatableHolder(Animatable(resetValue.value ?? value, converter)) }
+    var animatable = holder.animatable
     // Nothing of the animatable observed here (Flat-Six patch): read while composing, its value recomposed this view
     // on every frame of an animation, and whether it runs and where it goes recomposed it as one starts and ends. What
     // is read here is only needed when the view recomposes anyway, for a new target.
@@ -666,6 +667,13 @@ public enum AnimationCompletionCriteria : Hashable {
     let isNewTarget = Snapshot.withoutReadObservation { animatable.targetValue } != value
     if isAnimating || isNewTarget {
         let animation = Animation.current(isAnimating: isAnimating)
+        // A new value with no animation is the value in this frame (Flat-Six patch: AnimatableHolder): snapped in the
+        // effect below, it landed after the frame's layout — a view's frame, place or look a frame behind every plain
+        // change, a turned phone laid out from its portrait sizes first
+        if animation == nil && isNewTarget {
+            animatable = Animatable(value, converter)
+            holder.animatable = animatable
+        }
         LaunchedEffect(value, animation) {
             if let animation {
                 if animation.isInfinite {
@@ -697,7 +705,8 @@ public enum AnimationCompletionCriteria : Hashable {
     }
     // SKIP NOWARN
     let resetValue = rememberSaveable(stateSaver: context.stateSaver as Saver<T?, Any>) { mutableStateOf<T?>(nil) }
-    let animatable = remember { Animatable(resetValue.value ?? value, converter) }
+    let holder = remember { AnimatableHolder(Animatable(resetValue.value ?? value, converter)) }
+    var animatable = holder.animatable
     // Nothing of the animatable observed here (Flat-Six patch): read while composing, its value recomposed this view,
     // and all it holds, on every frame of an animation, and whether it runs and where it goes recomposed it as one
     // starts and ends. What is read here is only needed when the view recomposes anyway, for a new target; the
@@ -711,6 +720,13 @@ public enum AnimationCompletionCriteria : Hashable {
         // a changed drag operand from a plain replacement of the animated anchor. Keeping
         // the old interpolation for every plain target would also animate intentional snaps.
         let animation = Animation.current(isAnimating: isAnimating && !isNewTarget, animTx: animTx)
+        // A new value with no animation is the value in this frame (Flat-Six patch: AnimatableHolder): snapped in the
+        // effect below, it landed after the frame's layout — a view's frame, place or look a frame behind every plain
+        // change, a turned phone laid out from its portrait sizes first
+        if animation == nil && isNewTarget {
+            animatable = Animatable(value, converter)
+            holder.animatable = animatable
+        }
         LaunchedEffect(value, animation) {
             if let animation {
                 if animation.isInfinite {

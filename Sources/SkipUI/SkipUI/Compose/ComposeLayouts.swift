@@ -180,7 +180,9 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
 ///     passed to the given closure.
 /// - Parameter bottomAdjacencyTolerancePx: Distance from the bottom safe boundary still considered adjacent.
 /// - Parameter logTag: When non-empty, emits Android ``Log`` lines with tag `SkipUI.ISAL.<logTag>` (e.g. filter logcat `SkipUI.ISAL.List`).
-@Composable func IgnoresSafeAreaLayout(expandInto: Edge.Set, checkEdges: Edge.Set = [], modifier: Modifier = Modifier, bottomAdjacencyTolerancePx: Float = Float(0.1), logTag: String = "", target: @Composable (IntRect, Edge.Set) -> Void) {
+/// - Parameter insetsContentSides: Whether the target keeps its content in from the sides by the inset it is given (a
+///     tab view, a navigation stack, a list), so its content's layout box is the safe-clamped one (_layoutBoxPx).
+@Composable func IgnoresSafeAreaLayout(expandInto: Edge.Set, checkEdges: Edge.Set = [], modifier: Modifier = Modifier, bottomAdjacencyTolerancePx: Float = Float(0.1), insetsContentSides: Bool = false, logTag: String = "", target: @Composable (IntRect, Edge.Set) -> Void) {
     guard let safeArea = EnvironmentValues.shared._safeArea else {
         if !logTag.isEmpty {
             Log.d("SkipUI.ISAL.\(logTag)", "no SafeArea in environment; skipping expansion")
@@ -210,9 +212,20 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
     // one that ignored the safe area) past it — and the safe area at the sides goes on to its content whole, where Skip
     // had spent it: a container inside keeps its content clear of a cutout however its ancestors were laid out. Where the
     // parent put it is learnt once it is laid out; until then the safe area's edge stands in, as before.
+    // The sides kept as where the slot lay in its layout box (Flat-Six patch): the box its container composed it in this
+    // frame (_layoutBoxPx) — the presentation's content, or the reach of a view around it that ignores the safe area. Kept
+    // as places in the window, the slot was learnt a layout late: a turned phone placed every such view from its portrait
+    // slot in the landscape window — the cutout's side not reached and the content kept in from it instead, a strip down
+    // the screen's side — and put each right a frame and a level at a time. A view at its box's edge is at the edge after
+    // a resize as before it, and only a view at an edge reaches.
+    let layoutBox = EnvironmentValues.shared._layoutBoxPx
     let slotState = remember { mutableStateOf<Rect?>(nil) }
-    let slotLeft = slotState.value?.left ?? safeArea.safeBoundsPx.left
-    let slotRight = slotState.value?.right ?? safeArea.safeBoundsPx.right
+    var slotLeft = safeArea.safeBoundsPx.left
+    var slotRight = safeArea.safeBoundsPx.right
+    if let slot = slotState.value {
+        slotLeft = layoutBox != nil ? layoutBox!.left + slot.left : slot.left
+        slotRight = layoutBox != nil ? layoutBox!.right - slot.right : slot.right
+    }
     // The top and bottom reached from the slot as well (Flat-Six patch): a view the parent had already put up in the
     // status bar's band reached the whole band again above that — a view beside a column on a phone on its side 100 px
     // high, a strip of the stack's ground under it at the foot. Each expansion rounded as Compose rounds the padding it
@@ -267,14 +280,20 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
 
     let contentSafeBounds = Rect(top: safeTop, left: safeLeft, bottom: safeBottom, right: safeRight)
     let contentSafeArea = SafeArea(presentation: safeArea.presentationBoundsPx, safe: contentSafeBounds, absoluteSystemBars: safeArea.absoluteSystemBarEdges, keyboard: safeArea.keyboardPx)
+    // The box the content takes its place from (Flat-Six patch: _layoutBoxPx): the view as it reaches — its slot out by
+    // what it reached — less what its target keeps its content in by at the sides, where it does
+    let contentLeft = slotLeft - Float(expansionLeft) + (insetsContentSides ? Float(insetLeft) : Float(0.0))
+    let contentRight = slotRight + Float(expansionRight) - (insetsContentSides ? Float(insetRight) : Float(0.0))
+    let contentBox = Rect(left: contentLeft, top: Float(0.0), right: contentRight, bottom: Float(0.0))
     EnvironmentValues.shared.setValues {
         $0.set_safeArea(contentSafeArea)
+        $0.set_layoutBoxPx(contentBox)
         return ComposeResult.ok
     } in: {
         Layout(modifier: modifier.onGloballyPositionedInWindow {
-            // where the parent put the view: across, the view keeps its slot (below); its top and bottom as where they lie
-            // against the safe area's (above)
-            let slot = Rect(top: $0.top - safeArea.safeBoundsPx.top, left: $0.left, bottom: $0.bottom - safeArea.safeBoundsPx.bottom, right: $0.right)
+            // where the parent put the view: across, where it lies in its layout box (above); its top and bottom as where
+            // they lie against the safe area's (above)
+            let slot = Rect(top: $0.top - safeArea.safeBoundsPx.top, left: layoutBox != nil ? $0.left - layoutBox!.left : $0.left, bottom: $0.bottom - safeArea.safeBoundsPx.bottom, right: layoutBox != nil ? layoutBox!.right - $0.right : $0.right)
             let known = slotState.value
             if known == nil || abs(known!.left - slot.left) > Float(0.5) || abs(known!.right - slot.right) > Float(0.5) || abs(known!.top - slot.top) > Float(0.5) || abs(known!.bottom - slot.bottom) > Float(0.5) {
                 slotState.value = slot

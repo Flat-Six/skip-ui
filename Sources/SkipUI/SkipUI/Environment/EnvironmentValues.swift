@@ -23,6 +23,7 @@ import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.currentComposer
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
@@ -936,6 +937,22 @@ extension EnvironmentValues {
     var _safeArea: SafeArea? {
         get { builtinValue(key: "_safeArea", defaultValue: { nil }) as! SafeArea? }
         set { setBuiltinValue(key: "_safeArea", value: newValue, defaultValue: { nil }) }
+    }
+
+    /// The box, in the window, that a view ignoring the safe area takes its place from (Flat-Six patch): a presentation's
+    /// content, then each such view's own reach (or its content's, where its container keeps that in from the sides), as
+    /// composed in this frame — so after a resize a view's place is known before its layout reports it (IgnoresSafeAreaLayout)
+    var _layoutBoxPx: Rect? {
+        get { builtinValue(key: "_layoutBoxPx", defaultValue: { nil }) as! Rect? }
+        set { setBuiltinValue(key: "_layoutBoxPx", value: newValue, defaultValue: { nil }) }
+    }
+
+    /// The window's top inset — its status bar or a cutout there — as the presentation filling the window has it in this
+    /// frame (Flat-Six patch): the window manager's in the first frame of a resize, where WindowInsets read while composing
+    /// were still the old window's (a navigation bar's estimated height). Nil in a sheet, which has a window of its own
+    var _windowTopInsetPx: Float? {
+        get { builtinValue(key: "_windowTopInsetPx", defaultValue: { nil }) as! Float? }
+        set { setBuiltinValue(key: "_windowTopInsetPx", value: newValue, defaultValue: { nil }) }
     }
 
     var _scrollAxes: Axis.Set {
