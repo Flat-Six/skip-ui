@@ -18,10 +18,12 @@ public final class HarnessScrollViews {
     final class Entry {
         var area = 0
         let canScroll: () -> Bool
+        let canScrollForward: () -> Bool
         let toEnd: () -> Void
 
-        init(canScroll: @escaping () -> Bool, toEnd: @escaping () -> Void) {
+        init(canScroll: @escaping () -> Bool, canScrollForward: @escaping () -> Bool, toEnd: @escaping () -> Void) {
             self.canScroll = canScroll
+            self.canScrollForward = canScrollForward
             self.toEnd = toEnd
         }
     }
@@ -39,20 +41,31 @@ public final class HarnessScrollViews {
     /// The largest scroll view that can scroll, to its end — the newest of those near its size, as what is presented over
     /// a page comes after it. False where nothing on screen scrolls.
     public func toFoot() -> Bool {
+        return toFootState() != 0
+    }
+
+    /// toFoot, saying what it found: 1 where the scroll view chosen as toFoot chooses it was scrolled toward its end, 2
+    /// where it was at its end already (nothing scrolled: the tool's look may end at once), 0 where nothing on screen
+    /// scrolls. The view is chosen among those that can scroll at all, its end reached or not, so that one at its end is
+    /// not passed over for a smaller one.
+    public func toFootState() -> Int {
         let scrolling = entries.filter { $0.area > 0 && $0.canScroll() }
         guard let largest = scrolling.max(by: { $0.area < $1.area }) else {
-            return false
+            return 0
         }
         let chosen = scrolling.last(where: { $0.area * 3 >= largest.area * 2 }) ?? largest
+        if !chosen.canScrollForward() {
+            return 2
+        }
         chosen.toEnd()
-        return true
+        return 1
     }
 }
 
 /// Takes a vertical scroll view part in the screenshot tool's scroll to its foot while composed, sized as laid out
 /// (Flat-Six patch).
-@Composable func HarnessScrollRegistration(canScroll: @escaping () -> Bool, toEnd: @escaping () -> Void) -> Modifier {
-    let entry = remember { HarnessScrollViews.Entry(canScroll: canScroll, toEnd: toEnd) }
+@Composable func HarnessScrollRegistration(canScroll: @escaping () -> Bool, canScrollForward: @escaping () -> Bool, toEnd: @escaping () -> Void) -> Modifier {
+    let entry = remember { HarnessScrollViews.Entry(canScroll: canScroll, canScrollForward: canScrollForward, toEnd: toEnd) }
     DisposableEffect(entry) {
         HarnessScrollViews.shared.register(entry)
         onDispose { HarnessScrollViews.shared.unregister(entry) }

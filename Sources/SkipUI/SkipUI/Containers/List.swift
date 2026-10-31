@@ -340,7 +340,7 @@ public final class List : View, Renderable {
         let listRowSpacing = EnvironmentValues.shared._listRowSpacing
         let listVerticalArrangement = listRowSpacing != nil ? Arrangement.spacedBy(listRowSpacing!.dp) : Arrangement.Top
         // the screenshot tool's scroll to its foot (Flat-Six patch)
-        let harnessScroll = HarnessScrollRegistration(canScroll: { reorderableState.listState.canScrollForward || reorderableState.listState.canScrollBackward }, toEnd: {
+        let harnessScroll = HarnessScrollRegistration(canScroll: { reorderableState.listState.canScrollForward || reorderableState.listState.canScrollBackward }, canScrollForward: { reorderableState.listState.canScrollForward }, toEnd: {
             coroutineScope.launch {
                 let count = reorderableState.listState.layoutInfo.totalItemsCount
                 if count > 0 {
