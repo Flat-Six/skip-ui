@@ -59,6 +59,13 @@ private func composeFlexibleMergedMax(_ current: Float?, _ proposed: Float?) -> 
     // What the content says of its flexibility as it composes, applied as the parent measures until the values above
     // catch up — a composition later, a level of nesting at a time (Flat-Six patch: Skip/FlexibleReport.kt)
     let report = remember { FlexibleReport() }
+    // A container whose first composition carried the deferred element composes once more, its modifier then built from its
+    // records as every later composition builds it (Flat-Six patch, 2026-11-03). The two are meant to lay out alike, but a
+    // few do not (a grid two pixels aside), and with the flexible blocks made once (below) nothing else composes again a
+    // container whose records never change. The state is read here, so the pass is the container's own: its content
+    // composes again only where the modifier it is handed changes.
+    let settlePass = remember { mutableStateOf(0) }
+    let settled = settlePass.value > 0
 
     // Create the correct modifier for the current values and content
     var modifier = modifier
@@ -111,30 +118,16 @@ private func composeFlexibleMergedMax(_ current: Float?, _ proposed: Float?) -> 
     let totalScrollAxes = inheritedScrollAxes.union(scrollAxes)
 
     modifier = modifier.then(then)
-    EnvironmentValues.shared.setValues {
-        // Setup the initial environment before rendering the container content
-        if let axis {
-            $0.set_layoutAxis(axis)
-        } else if eraseAxis {
-            $0.set_layoutAxis(nil)
-        }
-        if totalLayoutScrollAxes != inheritedLayoutScrollAxes {
-            $0.set_layoutScrollAxes(totalLayoutScrollAxes)
-        }
-        if totalScrollAxes != inheritedScrollAxes {
-            $0.set_scrollAxes(totalScrollAxes)
-        }
-
-        // Reset the container layout because this is a new container. A directional container like 'HStack' or 'VStack' will set
-        // the correct layout before rendering in the content block below, so that its own children can distribute available space
-        $0.set_flexibleWidthModifier(nil)
-        $0.set_flexibleHeightModifier(nil)
-        $0.set_horizontalStackVerticalAlignmentKey(nil)
-        $0.set_flexibleReport(report)
-
-        // Set the 'flexibleWidth' and 'flexibleHeight' blocks to trigger a side effect to update our container's expansion state, which
-        // can cause it to recompose and recalculate its own modifier. We must use `SideEffect` or the recomposition never happens
-        $0.set_flexibleWidth { ideal, min, max in
+    // The content's 'flexibleWidth' and 'flexibleHeight' blocks, made once for the container (Flat-Six patch, 2026-11-03).
+    // Made anew in each composition, each was a new value of the environment's two keys every time the container composed
+    // again, which no block equals: every view under the container that reads them — every container and text — recomposed
+    // with it, so any container's recomposition ran through its whole subtree (a screen of a few hundred containers and texts
+    // on an emulator: ~730 scopes recomposed at once, ~7,000 blocks made anew, ~0.4 s). They read only what the container remembers —
+    // its report and its two records — so one block serves every composition alike. Each triggers a side effect to update
+    // the container's expansion state, which can cause it to recompose and recalculate its own modifier; we must use
+    // `SideEffect` or the recomposition never happens.
+    let flexibleWidthBlock: @Composable (Float?, Float?, Float?) -> Modifier = remember {
+        { ideal, min, max in
             report.reportWidth(max)
             var defaultModifier: Modifier = Modifier
             if max?.isFlexibleExpanding == true {
@@ -163,7 +156,9 @@ private func composeFlexibleMergedMax(_ current: Float?, _ proposed: Float?) -> 
             return EnvironmentValues.shared._flexibleWidthModifier?(ideal, min, max)
                 ?? defaultModifier.applyNonExpandingFlexibleWidth(ideal: ideal, min: min, max: max)
         }
-        $0.set_flexibleHeight { ideal, min, max in
+    }
+    let flexibleHeightBlock: @Composable (Float?, Float?, Float?) -> Modifier = remember {
+        { ideal, min, max in
             report.reportHeight(max)
             var defaultModifier: Modifier = Modifier
             if max?.isFlexibleExpanding == true {
@@ -192,11 +187,39 @@ private func composeFlexibleMergedMax(_ current: Float?, _ proposed: Float?) -> 
             return EnvironmentValues.shared._flexibleHeightModifier?(ideal, min, max)
                 ?? defaultModifier.applyNonExpandingFlexibleHeight(ideal: ideal, min: min, max: max)
         }
+    }
+    EnvironmentValues.shared.setValues {
+        // Setup the initial environment before rendering the container content
+        if let axis {
+            $0.set_layoutAxis(axis)
+        } else if eraseAxis {
+            $0.set_layoutAxis(nil)
+        }
+        if totalLayoutScrollAxes != inheritedLayoutScrollAxes {
+            $0.set_layoutScrollAxes(totalLayoutScrollAxes)
+        }
+        if totalScrollAxes != inheritedScrollAxes {
+            $0.set_scrollAxes(totalScrollAxes)
+        }
+
+        // Reset the container layout because this is a new container. A directional container like 'HStack' or 'VStack' will set
+        // the correct layout before rendering in the content block below, so that its own children can distribute available space
+        $0.set_flexibleWidthModifier(nil)
+        $0.set_flexibleHeightModifier(nil)
+        $0.set_horizontalStackVerticalAlignmentKey(nil)
+        $0.set_flexibleReport(report)
+
+        // The content's 'flexibleWidth' and 'flexibleHeight' blocks, the container's own (above)
+        $0.set_flexibleWidth(flexibleWidthBlock)
+        $0.set_flexibleHeight(flexibleHeightBlock)
         return ComposeResult.ok
     } in: {
         // Render the container content with the above environment setup
         content(modifier)
         report.hasComposed = true
+        if !settled && report.carriesDeferred {
+            SideEffect { settlePass.value = 1 }
+        }
     }
 }
 #endif

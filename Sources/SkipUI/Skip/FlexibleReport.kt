@@ -42,6 +42,9 @@ class FlexibleReport {
     /** Whether the container has composed once: a fresh container carries the deferred element whatever its content turns out to say. */
     var hasComposed = false
 
+    /** Whether the container's modifier carries the deferred element as it was last built ([deferredFlexible]). */
+    var carriesDeferred = false
+
     /** The content's width, as the container's `flexibleWidth` hears it. */
     fun reportWidth(max: Float?) {
         val merged = flexibleMerged(widthMax, flexibleClassified(max))
@@ -117,7 +120,8 @@ fun deferredFlexibleMode(forwards: Boolean, inContainer: Boolean, inStack: Boole
 fun Modifier.deferredFlexible(report: FlexibleReport, widthMode: Int, composedWidthMax: Float?, heightMode: Int, composedHeightMax: Float?): Modifier {
     val width = if (widthMode != FLEXIBLE_DEFERRED_NONE && (!report.hasComposed || flexibleRank(report.widthMax) > flexibleRank(composedWidthMax))) widthMode else FLEXIBLE_DEFERRED_NONE
     val height = if (heightMode != FLEXIBLE_DEFERRED_NONE && (!report.hasComposed || flexibleRank(report.heightMax) > flexibleRank(composedHeightMax))) heightMode else FLEXIBLE_DEFERRED_NONE
-    if (width == FLEXIBLE_DEFERRED_NONE && height == FLEXIBLE_DEFERRED_NONE) {
+    report.carriesDeferred = width != FLEXIBLE_DEFERRED_NONE || height != FLEXIBLE_DEFERRED_NONE
+    if (!report.carriesDeferred) {
         return this
     }
     return this.then(DeferredFlexibleElement(report, width, composedWidthMax, height, composedHeightMax))
