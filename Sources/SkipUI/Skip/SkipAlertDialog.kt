@@ -84,13 +84,24 @@ fun SkipAlertDialog(
         ) {
             SkipAlertDialogContent(
                 buttons = {
-                    SkipAlertDialogFlowRow(
-                        mainAxisSpacing = ButtonsMainAxisSpacing,
-                        crossAxisSpacing = ButtonsCrossAxisSpacing,
-                    ) {
-                        for (btn in neutralButtons) { btn() }
-                        dismissButton?.let { it() }
-                        confirmButton()
+                    if (neutralButtons.size + (if (dismissButton == null) 0 else 1) + 1 > 2) {
+                        // Three buttons or more stand one under another, the first action first and Cancel last, as iOS
+                        // stacks them (Flat-Six patch): the flow row paired them as the width allowed — "Start Without
+                        // Me  Cancel" over "Add Me" — and Material's own guidance stacks actions that do not fit a row
+                        Column(horizontalAlignment = Alignment.End) {
+                            confirmButton()
+                            for (btn in neutralButtons) { btn() }
+                            dismissButton?.let { it() }
+                        }
+                    } else {
+                        SkipAlertDialogFlowRow(
+                            mainAxisSpacing = ButtonsMainAxisSpacing,
+                            crossAxisSpacing = ButtonsCrossAxisSpacing,
+                        ) {
+                            for (btn in neutralButtons) { btn() }
+                            dismissButton?.let { it() }
+                            confirmButton()
+                        }
                     }
                 },
                 icon = icon,
