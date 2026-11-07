@@ -863,6 +863,25 @@ final class DisableScrollToDismissConnection : NestedScrollConnection {
         guard let button = $0.strip() as? Button else { return false }
         return button.role == .cancel
     }
+    // Three buttons or more stand one under another, the options in their order and Cancel last, as iOS stacks them
+    // (Flat-Six patch): the flow row paired them as the width allowed — "Start Without Me  Cancel" over "Add Me",
+    // "Keep Dad · 1 round  Cancel" over "Keep Tom Parker · 14 rounds" — and Material's own guidance stacks actions
+    // that do not fit a row
+    if optionRenderables.size + (cancelButton == nil ? 0 : 1) > 2 {
+        Column(modifier: Modifier.fillMaxWidth(), horizontalAlignment: androidx.compose.ui.Alignment.End) {
+            for actionRenderable in optionRenderables {
+                AlertButton(modifier: flowRowButtonModifier, renderable: actionRenderable, isPresented: isPresented) {
+                    buttonContent(actionRenderable, false)
+                }
+            }
+            if let cancelButton {
+                AlertButton(modifier: flowRowButtonModifier, renderable: cancelButton, isPresented: isPresented) {
+                    buttonContent(cancelButton, true)
+                }
+            }
+        }
+        return
+    }
     Box(modifier: Modifier.fillMaxWidth(), contentAlignment: androidx.compose.ui.Alignment.CenterEnd) {
         AlertDialogFlowRow(mainAxisSpacing: ButtonsMainAxisSpacing, crossAxisSpacing: ButtonsCrossAxisSpacing) {
             if let cancelButton {
