@@ -1423,7 +1423,12 @@ public final class List : View, Renderable {
             .background(backgroundColor)
             .then(context.modifier)
         var contentModifier = Modifier.fillMaxWidth()
-        if isTop && styling.style != .plain {
+        if let insets = ListItemModifier.combined(for: content)?.insets {
+            // A header's own insets in place of the list's, as a row's (Flat-Six patch): a table whose titles are a
+            // plain list's header, ruled to the edges as its lines are, kept the list's 16 dp a side here while its
+            // lines had none — and measured its width off the header, so the lines were laid out short and centred
+            contentModifier = contentModifier.padding(start: insets.leading.dp, top: insets.top.dp, end: insets.trailing.dp, bottom: insets.bottom.dp)
+        } else if isTop && styling.style != .plain {
             contentModifier = contentModifier.padding(start: Self.horizontalItemInset.dp, top: 0.dp, end: Self.horizontalItemInset.dp, bottom: Self.verticalItemInset.dp + marginBelow)
         } else {
             contentModifier = contentModifier.padding(horizontal: Self.horizontalItemInset.dp, vertical: Self.verticalItemInset.dp)
