@@ -603,6 +603,20 @@ public struct TabView : View, Renderable {
                                             contentSafeArea = SafeArea(presentation: area.presentationBoundsPx, safe: Rect(top: paddedTopPx, left: area.safeBoundsPx.left, bottom: area.safeBoundsPx.bottom, right: area.safeBoundsPx.right), absoluteSystemBars: area.absoluteSystemBarEdges, keyboard: area.keyboardPx)
                                         }
                                     }
+                                    // The content's safe area ends where the content does when there is no bar (Flat-Six
+                                    // patch): padded up from the system bar, its safe area ends at the padding, the bottom
+                                    // a system bar's edge still — a navigation stack in it reaches into the system bar
+                                    // for its bottom bar, as the tab bar did, and pads its content by the system bar
+                                    // once. Inset to a bar's top of 0, the safe area reached the screen's bottom with the
+                                    // system bar's edge named, and the stack's bottom bar, not reaching, padded itself
+                                    // for the system bar a second time: a toolbar in a hidden tab bar's place stood the
+                                    // system bar's height above the system bar, as tall again.
+                                    if bottomPadding.value > Float(0.0), let area = contentSafeArea {
+                                        let paddedBottomPx = area.presentationBoundsPx.bottom - with(density) { bottomPadding.toPx() }
+                                        if area.safeBoundsPx.bottom > paddedBottomPx {
+                                            contentSafeArea = SafeArea(presentation: area.presentationBoundsPx, safe: Rect(top: area.safeBoundsPx.top, left: area.safeBoundsPx.left, bottom: paddedBottomPx, right: area.safeBoundsPx.right), absoluteSystemBars: area.absoluteSystemBarEdges, keyboard: area.keyboardPx)
+                                        }
+                                    }
                                     if tabNavLeadingEndPx.value > Float(0.0) {
                                         contentSafeArea = contentSafeArea?.insetting(Edge.leading, to: tabNavLeadingEndPx.value)
                                     }
