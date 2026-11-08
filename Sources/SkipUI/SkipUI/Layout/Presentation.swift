@@ -281,7 +281,11 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
                 let presentationContext = context.content(stateSaver: stateSaver)
                 // Place inside of ModalBottomSheet, which renders content async
                 ElevatedPresentationTheme(isElevated: !isFullScreen) {
-                PresentationRoot(backgroundColor: presentationColor, context: presentationContext, absoluteSystemBarEdges: systemBarEdges, followsWindow: false) { context in
+                // Clear of the keyboard already (Flat-Six patch): Material's modal bottom sheet pads its content for the
+                // keyboard (imePadding, in its content), and the root padded for it again — a form's list in a sheet
+                // ended a keyboard's height above the keyboard, white from the row in use down, the rows after it never
+                // composed (Kyle on the Pixel 8a: "it flies to near the top and there's a huge white block underneath it")
+                PresentationRoot(backgroundColor: presentationColor, context: presentationContext, absoluteSystemBarEdges: systemBarEdges, followsWindow: false, clearOfKeyboard: true) { context in
                     EnvironmentValues.shared.setValues {
                         if !isFullScreen {
                             $0.set_sheetDepth(sheetDepth + 1)

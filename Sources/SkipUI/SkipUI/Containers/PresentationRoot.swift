@@ -31,7 +31,10 @@ import kotlin.math.abs
 ///
 /// - Parameter followsWindow: Whether the presentation fills its activity's window, so that after a resize its bounds and
 ///     insets are the window's as the window manager has them — false for a sheet, which has bounds of its own.
-@Composable public func PresentationRoot(defaultColorScheme: ColorScheme? = nil, backgroundColor: Color? = nil, absoluteSystemBarEdges systemBarEdges: Edge.Set = .all, followsWindow: Bool = true, context: ComposeContext, content: @Composable (ComposeContext) -> Void) {
+/// - Parameter clearOfKeyboard: Whether the presentation's container already keeps it clear of the keyboard (Flat-Six
+///     patch): Material's modal bottom sheet pads its content for the keyboard itself, so a root in one does not — it had,
+///     and a form in a sheet stood shrunk by the keyboard twice, white from the row in use to the keyboard's top.
+@Composable public func PresentationRoot(defaultColorScheme: ColorScheme? = nil, backgroundColor: Color? = nil, absoluteSystemBarEdges systemBarEdges: Edge.Set = .all, followsWindow: Bool = true, clearOfKeyboard: Bool = false, context: ComposeContext, content: @Composable (ComposeContext) -> Void) {
     launchUIApplicationActivity()
 
     let preferredColorScheme = rememberSaveable(stateSaver: context.stateSaver as! Saver<Preference<PreferredColorScheme>, Any>) { mutableStateOf(Preference<PreferredColorScheme>(key: PreferredColorSchemePreferenceKey.self)) }
@@ -53,7 +56,7 @@ import kotlin.math.abs
             // GeometryReaderState) — imePadding() read the inset as the layout ran, a frame ahead of the safe area made in
             // composition: an opened Fold8 on its side added up a window 281 tall the frame its keyboard came in, under 600,
             // so no longer tablet-like, its form made anew and its field's focus lost, the keyboard gone again
-            let keyboardPx = systemBarEdges.contains(.bottom) ? WindowInsets.ime.getBottom(density) : 0
+            let keyboardPx = !clearOfKeyboard && systemBarEdges.contains(.bottom) ? WindowInsets.ime.getBottom(density) : 0
             // The window as the window manager has it, read again at each configuration (Flat-Six patch): for a
             // presentation filling it, its bounds and insets in the first frame of a resize (below)
             let configuration = LocalConfiguration.current
