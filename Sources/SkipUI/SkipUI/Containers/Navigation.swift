@@ -698,7 +698,11 @@ public struct NavigationStack : View, Renderable {
                         let containerColor = showScrolledBackground ? bottomBarBackgroundColor : unscrolledBottomBarBackgroundColor
                         let usesBottomSystemBarInset = EnvironmentValues.shared._isEdgeToEdge == true && arguments.safeArea?.absoluteSystemBarEdges.contains(.bottom) == true
                         let windowInsets = (usesBottomSystemBarInset ? BottomAppBarDefaults.windowInsets.only(WindowInsetsSides.Bottom) : WindowInsets(bottom: 0.dp)).add(WindowInsets(left: arguments.leftInsetPx, top: 0, right: arguments.rightInsetPx, bottom: 0))
-                        var options = Material3BottomAppBarOptions(modifier: context.modifier.then(bottomBarModifier), containerColor: containerColor, contentColor: MaterialTheme.colorScheme.contentColorFor(containerColor), contentPadding: PaddingValues.Absolute(left: 16.dp, right: 16.dp))
+                        // A bottom bar of iOS's height, 44 dp and the system bar's inset under it (Flat-Six patch): Material's
+                        // bottom app bar stands 80 dp, which its row holds to; the surface held to the lesser height holds
+                        // the row to it, as a parent's constraints do
+                        let barHeight = 44.dp + with(density) { windowInsets.getBottom(density).toDp() }
+                        var options = Material3BottomAppBarOptions(modifier: context.modifier.then(bottomBarModifier).height(barHeight), containerColor: containerColor, contentColor: MaterialTheme.colorScheme.contentColorFor(containerColor), contentPadding: PaddingValues.Absolute(left: 16.dp, right: 16.dp))
                         if let updateOptions = EnvironmentValues.shared._material3BottomAppBar {
                             options = updateOptions(options)
                         }
