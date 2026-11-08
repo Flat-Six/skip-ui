@@ -293,7 +293,18 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
         Layout(modifier: modifier.onGloballyPositionedInWindow {
             // where the parent put the view: across, where it lies in its layout box (above); its top and bottom as where
             // they lie against the safe area's (above)
-            let slot = Rect(top: $0.top - safeArea.safeBoundsPx.top, left: layoutBox != nil ? $0.left - layoutBox!.left : $0.left, bottom: $0.bottom - safeArea.safeBoundsPx.bottom, right: layoutBox != nil ? layoutBox!.right - $0.right : $0.right)
+            var slotLeft = layoutBox != nil ? $0.left - layoutBox!.left : $0.left
+            var slotRight = layoutBox != nil ? layoutBox!.right - $0.right : $0.right
+            // A view as wide as its box but off it is in motion — a navigation's slide in or out — and its place is the
+            // box's (Flat-Six patch): read where it was for the frame, its reach into a cutout and its inset from it were
+            // made anew each frame of a slide, from a place that was not its own, so a table in a list on its way back
+            // was laid out a cutout's width narrower and widened as it landed (Kyle on a Pixel 8a, 2026-11-08: "a little
+            // bit of a layout shake when navigating back to the players list … most noticeable in landscape")
+            if layoutBox != nil && abs(slotLeft + slotRight) < Float(0.5) {
+                slotLeft = Float(0.0)
+                slotRight = Float(0.0)
+            }
+            let slot = Rect(top: $0.top - safeArea.safeBoundsPx.top, left: slotLeft, bottom: $0.bottom - safeArea.safeBoundsPx.bottom, right: slotRight)
             let known = slotState.value
             if known == nil || abs(known!.left - slot.left) > Float(0.5) || abs(known!.right - slot.right) > Float(0.5) || abs(known!.top - slot.top) > Float(0.5) || abs(known!.bottom - slot.bottom) > Float(0.5) {
                 slotState.value = slot
