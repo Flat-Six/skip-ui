@@ -275,7 +275,10 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
 
             let clipShape = isCard ? RoundedCornerShape(cardCornerRadius.dp) : RoundedCornerShape(topStart: isFullScreen || isCompactHeight ? 0.dp : overlayPresentationCornerRadius.dp, topEnd: isFullScreen || isCompactHeight ? 0.dp : overlayPresentationCornerRadius.dp)
             let contentModifier = isCard ? Modifier.fillMaxWidth().height(cardRoomHeight).clip(clipShape) : Modifier.weight(Float(1.0)).clip(clipShape)
-            Box(modifier: interactiveDismissDisabled ? contentModifier.nestedScroll(DisableScrollToDismissConnection()) : contentModifier) {
+            // A sheet at its full height stays there (Flat-Six patch): what a drag up leaves over at the end of a list in it
+            // is taken before Material's sheet moves itself up by it (HoldSheetAtTopConnection)
+            let heldModifier = contentModifier.nestedScroll(HoldSheetAtTopConnection())
+            Box(modifier: interactiveDismissDisabled ? heldModifier.nestedScroll(DisableScrollToDismissConnection()) : heldModifier) {
                 // Place outside of PresentationRoot recomposes
                 let stateSaver = remember { ComposeStateSaver() }
                 let presentationContext = context.content(stateSaver: stateSaver)
@@ -477,6 +480,19 @@ func isBackDismissDisabled(on renderables: kotlin.collections.List<Renderable>) 
         }
     }
     return false
+}
+
+/// A sheet at its full height stays there (Flat-Six patch). On Android 15 and after, Material's modal sheet takes what a
+/// drag up leaves over at the end of a list in it and moves itself up by it — its offset past its Expanded anchor, by the
+/// drag, springing back on release — and a list in it is laid out again as it goes, its rows and its section chrome by
+/// different rules, so they moved apart (Kyle on a Pixel 8a, 2026-11-07: "the footers and the text fields don't rubber
+/// band the same when scrolled at the limit"). Android 13's sheet never moved. iOS's full sheet does not travel up:
+/// what is left over of a drag up is taken here, between the list and the sheet; a drag down, to dismiss, passes as
+/// before.
+final class HoldSheetAtTopConnection : NestedScrollConnection {
+    override func onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) -> Offset {
+        return available.y < Float(0.0) ? available.copy(x: Float(0.0)) : Offset.Zero
+    }
 }
 
 final class DisableScrollToDismissConnection : NestedScrollConnection {
