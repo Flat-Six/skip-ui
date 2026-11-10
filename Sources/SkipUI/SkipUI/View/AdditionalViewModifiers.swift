@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import org.burnoutcrew.reorderable.detectReorder
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
@@ -84,6 +85,24 @@ extension View {
             } in: {
                 renderable.Render(context: context)
             }
+        })
+        #else
+        return self
+        #endif
+    }
+
+    /// A drag handle for a `List` row that can be moved (`onMove`): dragging this view moves the row at once, where
+    /// the row itself moves after a long press — as a list's edit mode gives each row a handle on iOS. Outside a
+    /// movable row it changes nothing.
+    // SKIP @bridge
+    public func reorderHandle() -> any View {
+        #if SKIP
+        return ModifiedContent(content: self, modifier: RenderModifier { renderable, context in
+            var context = context
+            if let state = LocalReorderableState.current {
+                context.modifier = context.modifier.detectReorder(state)
+            }
+            renderable.Render(context: context)
         })
         #else
         return self

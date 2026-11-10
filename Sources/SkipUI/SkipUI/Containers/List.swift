@@ -53,6 +53,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.SwipeToDismissBoxDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
@@ -1405,7 +1406,10 @@ public final class List : View, Renderable {
                 let elevation = animateDpAsState(8.dp)
                 itemModifier = itemModifier.shadow(elevation.value)
             }
-            content(itemModifier)
+            // the state for a drag handle inside the row (`reorderHandle`), which starts the drag without the long press
+            CompositionLocalProvider(LocalReorderableState.provides(reorderableState)) {
+                content(itemModifier)
+            }
         }
     }
 
