@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 #if !SKIP_BRIDGE
 import Foundation
+import SkipModel
 #if SKIP
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -260,12 +261,16 @@ public final class List : View, Renderable {
             guard let itemIndex = itemCollector.value.index(for: id) else {
                 return
             }
-            let animated = Animation.isInWithAnimation
+            // Animated inside withAnimation: its transaction is on the stack while the scope runs — the scope's marker
+            // (Animation.isInWithAnimation) is published only as it ends — and the marker just after it, where the
+            // coroutine runs (flatsix.21 read the marker alone, here, and never animated).
+            let inScope = (StateTracking.currentTransaction as? Transaction)?.animation != nil
             var share = 0.0
             if let anchor {
                 share = max(0.0, min(1.0, anchor.y))
             }
             coroutineScope.launch {
+                let animated = inScope || Animation.isInWithAnimation
                 let listState = reorderableState.listState
                 if listState.layoutInfo.visibleItemsInfo.firstOrNull({ $0.index == itemIndex }) == nil {
                     if animated {
