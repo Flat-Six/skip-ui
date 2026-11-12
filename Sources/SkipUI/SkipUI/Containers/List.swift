@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.GenericShape
@@ -251,21 +252,44 @@ public final class List : View, Renderable {
         })
         let scrollToID = ScrollToIDAction(key: reorderableState.listState, anchoredAction: { id, anchor in
             // The row placed by the anchor, as SwiftUI places it — the anchor's point in the row on the same point of
-            // the visible list (Flat-Six patch; Skip took every row to the top): the row to the top, then down by
-            // its share of the room left beside it
+            // the visible list (Flat-Six patch; Skip took every row to the top). The scroll is the difference between
+            // where the row stands and where the anchor puts it: a row off the screen is brought onto it first, and a
+            // list that cannot go so far stops at its end, as SwiftUI's does — the row to the top and then back by
+            // the anchor's share left such a list short of its end. Inside withAnimation it animates, as the plain
+            // scroll does (Flat-Six patch, 1.63.0-flatsix.21: it jumped).
             guard let itemIndex = itemCollector.value.index(for: id) else {
                 return
             }
+            let animated = Animation.isInWithAnimation
+            var share = 0.0
+            if let anchor {
+                share = max(0.0, min(1.0, anchor.y))
+            }
             coroutineScope.launch {
                 let listState = reorderableState.listState
-                listState.scrollToItem(itemIndex)
-                guard let anchor, anchor.y > 0.0 else {
-                    return
+                if listState.layoutInfo.visibleItemsInfo.firstOrNull({ $0.index == itemIndex }) == nil {
+                    if animated {
+                        listState.animateScrollToItem(itemIndex)
+                    } else {
+                        listState.scrollToItem(itemIndex)
+                    }
                 }
                 let layoutInfo = listState.layoutInfo
-                let viewport = layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding - layoutInfo.viewportStartOffset - layoutInfo.beforeContentPadding
-                let itemSize = layoutInfo.visibleItemsInfo.firstOrNull({ $0.index == itemIndex })?.size ?? 0
-                listState.scrollBy(Float(-anchor.y * Double(max(0, viewport - itemSize))))
+                guard let item = layoutInfo.visibleItemsInfo.firstOrNull({ $0.index == itemIndex }) else {
+                    return
+                }
+                let start = layoutInfo.viewportStartOffset + layoutInfo.beforeContentPadding
+                let viewport = layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding - start
+                let target = Double(start) + share * Double(max(0, viewport - item.size))
+                let delta = Float(Double(item.offset) - target)
+                if delta > Float(-1.0) && delta < Float(1.0) {
+                    return
+                }
+                if animated {
+                    listState.animateScrollBy(delta)
+                } else {
+                    listState.scrollBy(delta)
+                }
             }
         }, action: { id in
             if let itemIndex = itemCollector.value.index(for: id) {
