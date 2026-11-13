@@ -528,8 +528,8 @@ struct ToolbarPreferences: Equatable {
         self.navigationBackground = navigationBackground
     }
 
-    init(visibility: Visibility? = nil, background: ShapeStyle? = nil, backgroundVisibility: Visibility? = nil, colorScheme: ColorScheme? = nil, isSystemBackground: Bool? = nil, scrollableState: ScrollableState? = nil, visibilityAnimation: Animation? = nil, for bars: [ToolbarPlacement]) {
-        let barPreferences = ToolbarBarPreferences(visibility: visibility, background: background, backgroundVisibility: backgroundVisibility, colorScheme: colorScheme, isSystemBackground: isSystemBackground, scrollableState: scrollableState, visibilityAnimation: visibilityAnimation)
+    init(visibility: Visibility? = nil, background: ShapeStyle? = nil, backgroundVisibility: Visibility? = nil, colorScheme: ColorScheme? = nil, isSystemBackground: Bool? = nil, scrollableState: ScrollableState? = nil, scrollsForward: (() -> Bool)? = nil, visibilityAnimation: Animation? = nil, for bars: [ToolbarPlacement]) {
+        let barPreferences = ToolbarBarPreferences(visibility: visibility, background: background, backgroundVisibility: backgroundVisibility, colorScheme: colorScheme, isSystemBackground: isSystemBackground, scrollableState: scrollableState, scrollsForward: scrollsForward, visibilityAnimation: visibilityAnimation)
         var navigationBar: ToolbarBarPreferences? = nil
         var bottomBar: ToolbarBarPreferences? = nil
         for bar in bars {
@@ -573,20 +573,33 @@ struct ToolbarBarPreferences: Equatable {
     let colorScheme: ColorScheme?
     let isSystemBackground: Bool?
     let scrollableState: ScrollableState?
+    /// Whether the scroll state's content goes on past the bar, as its owner reads it, where the state's own answer is
+    /// not the whole of it — a list's end held for an animated update (Flat-Six patch, List)
+    let scrollsForward: (() -> Bool)?
     let visibilityAnimation: Animation?
 
-    init(visibility: Visibility? = nil, background: ShapeStyle? = nil, backgroundVisibility: Visibility? = nil, colorScheme: ColorScheme? = nil, isSystemBackground: Bool? = nil, scrollableState: ScrollableState? = nil, visibilityAnimation: Animation? = nil) {
+    init(visibility: Visibility? = nil, background: ShapeStyle? = nil, backgroundVisibility: Visibility? = nil, colorScheme: ColorScheme? = nil, isSystemBackground: Bool? = nil, scrollableState: ScrollableState? = nil, scrollsForward: (() -> Bool)? = nil, visibilityAnimation: Animation? = nil) {
         self.visibility = visibility
         self.background = background
         self.backgroundVisibility = backgroundVisibility
         self.colorScheme = colorScheme
         self.isSystemBackground = isSystemBackground
         self.scrollableState = scrollableState
+        self.scrollsForward = scrollsForward
         self.visibilityAnimation = visibilityAnimation
     }
 
+    /// Content under a bottom bar, for its scrolled background
+    var isScrolledUnder: Bool {
+        if let scrollsForward {
+            return scrollsForward()
+        }
+        return scrollableState?.canScrollForward == true
+    }
+
     func reduce(_ next: ToolbarBarPreferences) -> ToolbarBarPreferences {
-        return ToolbarBarPreferences(visibility: next.visibility ?? visibility, background: next.background ?? background, backgroundVisibility: next.backgroundVisibility ?? backgroundVisibility, colorScheme: next.colorScheme ?? colorScheme, isSystemBackground: next.isSystemBackground ?? isSystemBackground, scrollableState: next.scrollableState ?? scrollableState, visibilityAnimation: next.visibilityAnimation ?? visibilityAnimation)
+        // the reading of a scroll state goes with that state
+        return ToolbarBarPreferences(visibility: next.visibility ?? visibility, background: next.background ?? background, backgroundVisibility: next.backgroundVisibility ?? backgroundVisibility, colorScheme: next.colorScheme ?? colorScheme, isSystemBackground: next.isSystemBackground ?? isSystemBackground, scrollableState: next.scrollableState ?? scrollableState, scrollsForward: next.scrollableState != nil ? next.scrollsForward : scrollsForward, visibilityAnimation: next.visibilityAnimation ?? visibilityAnimation)
     }
 
     public static func ==(lhs: ToolbarBarPreferences, rhs: ToolbarBarPreferences) -> Bool {

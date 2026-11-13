@@ -643,7 +643,7 @@ public struct NavigationStack : View, Renderable {
                 return
             }
 
-            let showScrolledBackground = bottomBarPreferences?.backgroundVisibility == Visibility.visible || bottomBarPreferences?.scrollableState.canScrollForward == true
+            let showScrolledBackground = bottomBarPreferences?.backgroundVisibility == Visibility.visible || bottomBarPreferences?.isScrolledUnder == true
             let materialColorScheme: androidx.compose.material3.ColorScheme
             if showScrolledBackground, let customColorScheme = bottomBarPreferences?.colorScheme?.asMaterialTheme() {
                 materialColorScheme = customColorScheme

@@ -375,7 +375,7 @@ public struct TabView : View, Renderable {
                                 .semantics { testTagsAsResourceId = true }.testTag("skip_ui_automation_tab_bar")
                             let tint = EnvironmentValues.shared._tint
                             let isSystemBackground = reducedTabBarPreferences.isSystemBackground == true
-                            let showScrolledBackground = reducedTabBarPreferences.backgroundVisibility == Visibility.visible || reducedTabBarPreferences.scrollableState?.canScrollForward == true
+                            let showScrolledBackground = reducedTabBarPreferences.backgroundVisibility == Visibility.visible || reducedTabBarPreferences.isScrolledUnder
                             let materialColorScheme: androidx.compose.material3.ColorScheme
                             if showScrolledBackground, let customColorScheme = reducedTabBarPreferences.colorScheme?.asMaterialTheme() {
                                 materialColorScheme = customColorScheme

@@ -7,6 +7,7 @@ import SkipModel
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.AnchoredDraggableState
@@ -75,6 +76,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Path.Companion.combine
 import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.Density
@@ -291,7 +293,9 @@ public final class List : View, Renderable {
                     return
                 }
                 if animated {
-                    listState.animateScrollBy(delta)
+                    // on the rows' own spring — animateItem's placement, Compose's medium-low stiffness — so the scroll and
+                    // the rows it brings in settle together: its default, four times as stiff, was done while they came
+                    listState.animateScrollBy(delta, animationSpec: spring(stiffness: Float(400.0)))
                 } else {
                     listState.scrollBy(delta)
                 }
@@ -315,9 +319,24 @@ public final class List : View, Renderable {
         // - It is unlikely that anyone will use a grouped-style list that is not top-bar adjacent, so the top
         //   bar should always have the grouped-style system color
         PreferenceValues.shared.contribute(context: context, key: ToolbarPreferenceKey.self, value: ToolbarPreferences(isSystemBackground: isSystemBackground, scrollableState: listState, for: [ToolbarPlacement.navigationBar]))
+        // While the list's end is held for an animated update (below), the space held is no content under a bottom bar:
+        // the bars read the list's end where its last item ends, or a bar's scrolled background showed for the hold
+        // (Flat-Six patch). Only then is the layout read, so a bar is not composed again at each frame of a scroll.
+        let endHolds = remember { mutableStateOf(0) }
+        let scrollsForward: () -> Bool = {
+            let state = reorderableState.listState
+            if endHolds.value <= 0 {
+                return state.canScrollForward
+            }
+            let info = state.layoutInfo
+            guard let last = info.visibleItemsInfo.lastOrNull(), last.key == "list-end-hold" else {
+                return state.canScrollForward
+            }
+            return last.offset - info.mainAxisItemSpacing > info.viewportEndOffset - info.afterContentPadding
+        }
         if arguments.safeAreaEdges.contains(Edge.Set.bottom) {
-            PreferenceValues.shared.contribute(context: context, key: ToolbarPreferenceKey.self, value: ToolbarPreferences(isSystemBackground: isSystemBackground, scrollableState: listState, for: [ToolbarPlacement.bottomBar]))
-            PreferenceValues.shared.contribute(context: context, key: TabBarPreferenceKey.self, value: ToolbarBarPreferences(isSystemBackground: isSystemBackground, scrollableState: listState))
+            PreferenceValues.shared.contribute(context: context, key: ToolbarPreferenceKey.self, value: ToolbarPreferences(isSystemBackground: isSystemBackground, scrollableState: listState, scrollsForward: scrollsForward, for: [ToolbarPlacement.bottomBar]))
+            PreferenceValues.shared.contribute(context: context, key: TabBarPreferenceKey.self, value: ToolbarBarPreferences(isSystemBackground: isSystemBackground, scrollableState: listState, scrollsForward: scrollsForward))
         }
 
         // List item animations in Compose work by setting the `animateItemPlacement` modifier on the items. Critically,
@@ -331,6 +350,12 @@ public final class List : View, Renderable {
         // initial/bulk section loads need their rounded bottom chrome to appear at the settled position.
         let sectionChromeAnimationState = remember { SectionChromeAnimationState() }
         let sectionBottomPlacementInvalidation = remember { mutableStateOf(0) }
+        // An update made inside withAnimation: a section's footer — its rounded bottom — and the list's then move with the
+        // rows however many come or go, where a bulk change otherwise sets them in their places at once; and a list left
+        // too short for where it stands keeps its end for the update, then scrolls back to it (Flat-Six patch, below).
+        let animatedUpdate = Animation.current(isAnimating: false) != nil
+        let endHoldInvalidation = remember { mutableStateOf(0) }
+        let endHoldHeight = LocalConfiguration.current.screenHeightDp.dp
         if Animation.current(isAnimating: false) == nil {
             forceUnanimatedItems.value = true
             LaunchedEffect(System.currentTimeMillis()) {
@@ -372,7 +397,8 @@ public final class List : View, Renderable {
         // the screenshot tool's scroll to its foot (Flat-Six patch)
         let harnessScroll = HarnessScrollRegistration(canScroll: { reorderableState.listState.canScrollForward || reorderableState.listState.canScrollBackward }, canScrollForward: { reorderableState.listState.canScrollForward }, toEnd: {
             coroutineScope.launch {
-                let count = reorderableState.listState.layoutInfo.totalItemsCount
+                // the list's last item, not a space held after it (below)
+                let count = reorderableState.listState.layoutInfo.totalItemsCount - (sectionChromeAnimationState.endHeld ? 1 : 0)
                 if count > 0 {
                     reorderableState.listState.scrollToItem(count - 1)
                 }
@@ -381,6 +407,8 @@ public final class List : View, Renderable {
         LazyColumn(state: reorderableState.listState, modifier: modifier.then(harnessScroll), contentPadding: contentPadding, verticalArrangement: listVerticalArrangement) {
             // Intentionally invalidate the LazyColumn after a section bottom has seen one frame at its unanimated baseline
             let _ = sectionBottomPlacementInvalidation.value
+            // and once the list's end is let go (below)
+            let _ = endHoldInvalidation.value
 
             // Read move trigger here so that a move will recompose list content
             let _ = moveTrigger.value
@@ -616,7 +644,10 @@ public final class List : View, Renderable {
                     let shouldAnimateFooterPlacement: Bool
                     if let previousSectionItemCount = sectionChromeAnimationState.sectionBodyItemCounts[sectionKey], sectionChromeAnimationState.sectionBottomPlacementReady[sectionKey] == true {
                         let countDelta = currentSectionItemCount > previousSectionItemCount ? currentSectionItemCount - previousSectionItemCount : previousSectionItemCount - currentSectionItemCount
-                        shouldAnimateFooterPlacement = countDelta <= 1
+                        // a bulk change sets the footer in its place — but not one made inside withAnimation, whose rows
+                        // fade in and move (Flat-Six patch): the footer, drawn over the rows in the list's colour, stood
+                        // at the section's new bottom from the first frame, and the next section's rows slid under it
+                        shouldAnimateFooterPlacement = countDelta <= 1 || animatedUpdate
                     } else {
                         shouldAnimateFooterPlacement = false
                     }
@@ -689,7 +720,9 @@ public final class List : View, Renderable {
             let shouldAnimateListFooterPlacement: Bool
             if let previousListItemCount {
                 let countDelta = currentListItemCount > previousListItemCount ? currentListItemCount - previousListItemCount : previousListItemCount - currentListItemCount
-                shouldAnimateListFooterPlacement = countDelta <= 1
+                // as a section's footer, inside withAnimation (Flat-Six patch): set in its place at once, it hid the last
+                // section's rows as they slid up to it
+                shouldAnimateListFooterPlacement = countDelta <= 1 || animatedUpdate
             } else {
                 shouldAnimateListFooterPlacement = false
             }
@@ -708,6 +741,55 @@ public final class List : View, Renderable {
                         itemModifier = Modifier.animateItem(fadeInSpec: nil, placementSpec: nil, fadeOutSpec: nil)
                     }
                     RenderFooter(styling: styling, modifier: itemModifier, safeAreaHeight: arguments.footerSafeAreaHeight, hasBottomSection: hasBottomSection)
+                }
+            }
+
+            // Rows gone inside withAnimation — a section shut near the list's end — can leave the list too short for where
+            // it stands. Compose then puts it back at its end in that same measure, as layout rather than scroll: the
+            // rows coming on screen stood in their places from the first frame and the ones that had been there slid
+            // down over them. Here the list's end is held for the update, a space after its last item, and the list
+            // then scrolls back to it on the rows' spring, the top coming in as a scroll does, as SwiftUI's list
+            // moves (Flat-Six patch).
+            if animatedUpdate && !sectionChromeAnimationState.endHeld && previousListItemCount != nil && currentListItemCount < previousListItemCount! {
+                sectionChromeAnimationState.endHeld = true
+                coroutineScope.launch {
+                    // before the bars are composed again, after the measure that took the space
+                    endHolds.value = endHolds.value + 1
+                    defer {
+                        sectionChromeAnimationState.endHeld = false
+                        endHoldInvalidation.value = endHoldInvalidation.value + 1
+                        // the bars back on the list's own reading once it is measured without the space
+                        coroutineScope.launch {
+                            // SKIP INSERT: withFrameNanos { _ -> }
+                            // SKIP INSERT: withFrameNanos { _ -> }
+                            endHolds.value = endHolds.value - 1
+                        }
+                    }
+                    // the update's measure done
+                    // SKIP INSERT: withFrameNanos { _ -> }
+                    var passes = 0
+                    while passes < 3 {
+                        passes += 1
+                        let state = reorderableState.listState
+                        let info = state.layoutInfo
+                        guard let hold = info.visibleItemsInfo.firstOrNull({ $0.key == "list-end-hold" }) else {
+                            break
+                        }
+                        // how far the list's last item now ends above where the list's end shows
+                        let over = info.viewportEndOffset - info.afterContentPadding - (hold.offset - info.mainAxisItemSpacing)
+                        if over < 1 {
+                            break
+                        }
+                        let consumed = state.animateScrollBy(Float(-over), animationSpec: spring(stiffness: Float(400.0)))
+                        if consumed > Float(-1.0) {
+                            break
+                        }
+                    }
+                }
+            }
+            if sectionChromeAnimationState.endHeld {
+                item(key: "list-end-hold") {
+                    Box(modifier: Modifier.fillMaxWidth().height(endHoldHeight))
                 }
             }
         }
@@ -731,6 +813,8 @@ public final class List : View, Renderable {
         var sectionBottomPlacementReady: [String: Bool] = [:]
         var sectionBottomPlacementPending: [String: Bool] = [:]
         var listItemCount: Int? = nil
+        /// The list's end held after an animated update that left it too short (Flat-Six patch)
+        var endHeld = false
     }
 
     private static let horizontalInset = 16.0
