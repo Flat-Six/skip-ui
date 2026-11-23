@@ -248,6 +248,12 @@ public final class List : View, Renderable {
 
         // Integrate with our scroll-to-top and ScrollViewReader
         let coroutineScope = rememberCoroutineScope()
+        // The system bars' room the list reaches into is rows of its own — a header and a footer of the safe area's
+        // height (RenderHeader, RenderFooter) — not its content padding: an anchor places a row in the list as it is
+        // seen, between them (Flat-Six patch)
+        let safeAreaDensity = LocalDensity.current
+        let headerSafeAreaPx = with(safeAreaDensity) { arguments.headerSafeAreaHeight.toPx() }
+        let footerSafeAreaPx = with(safeAreaDensity) { arguments.footerSafeAreaHeight.toPx() }
         PreferenceValues.shared.contribute(context: context, key: ScrollToTopPreferenceKey.self, value: ScrollToTopAction(key: reorderableState.listState) {
             coroutineScope.launch {
                 reorderableState.listState.animateScrollToItem(0)
@@ -285,8 +291,10 @@ public final class List : View, Renderable {
                 guard let item = layoutInfo.visibleItemsInfo.firstOrNull({ $0.index == itemIndex }) else {
                     return
                 }
-                let start = layoutInfo.viewportStartOffset + layoutInfo.beforeContentPadding
-                let viewport = layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding - start
+                // the list as it is seen: under a system bar is no place for a row an anchor puts in view — a sheet's
+                // list runs on under the navigation bar, and a row brought to its end stood behind it (Flat-Six patch)
+                let start = layoutInfo.viewportStartOffset + layoutInfo.beforeContentPadding + Int(headerSafeAreaPx)
+                let viewport = layoutInfo.viewportEndOffset - layoutInfo.afterContentPadding - Int(footerSafeAreaPx) - start
                 let target = Double(start) + share * Double(max(0, viewport - item.size))
                 let delta = Float(Double(item.offset) - target)
                 if delta > Float(-1.0) && delta < Float(1.0) {
