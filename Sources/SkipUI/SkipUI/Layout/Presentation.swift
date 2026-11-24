@@ -118,6 +118,12 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
     }
 }
 
+/// What a sheet showed while it was presented (SheetPresentation, Flat-Six patch): kept outside the snapshot system, as a
+/// plain reference, so that keeping it does not ask for another composition.
+final class PresentedContent {
+    var renderables: kotlin.collections.List<Renderable>? = nil
+}
+
 // SKIP INSERT: @OptIn(ExperimentalMaterial3Api::class)
 @Composable func SheetPresentation(isPresented: Binding<Bool>, isFullScreen: Bool, context: ComposeContext, content: () -> any View, onDismiss: (() -> Void)?, overlay: Modifier? = nil) {
     let interactiveDismissDisabledPreference = rememberSaveable(stateSaver: context.stateSaver as! Saver<Preference<Bool>, Any>) { mutableStateOf(Preference<Bool>(key: InteractiveDismissDisabledPreferenceKey.self)) }
@@ -125,10 +131,23 @@ public let LocalElevatedPresentation = compositionLocalOf { false }
 
     let sheetState = rememberModalBottomSheetState(skipPartiallyExpanded: true)
     let isPresentedValue = isPresented.get()
+    // The content as it was presented, kept for the sheet's way out (Flat-Six patch): an item's presentation —
+    // sheet(item:), fullScreenCover(item:) — has no content once its item is nil, so the sheet went empty the moment it
+    // was dismissed, a white page sliding down over the presenter, where UIKit takes the page itself down (Kyle's
+    // recordings on the Pixel 8a, 2026-11-24: the edit round page closed by ✕, two white frames and then a blank sheet)
+    let presentedContent = remember { PresentedContent() }
+    if !isPresentedValue && !sheetState.isVisible {
+        presentedContent.renderables = nil   // gone: nothing kept of it
+    }
     if isPresentedValue || sheetState.isVisible {
         // Don't fully evaluate content until we set up the presented environment. For now we just want
         // to get at the modifiers to look for `BackDismissDisabled`
-        let contentRenderables = ComposeBuilder.from(content).Evaluate(context: context, options: EvaluateOptions(isKeepNonModified: true).value)
+        var contentRenderables = ComposeBuilder.from(content).Evaluate(context: context, options: EvaluateOptions(isKeepNonModified: true).value)
+        if isPresentedValue {
+            presentedContent.renderables = contentRenderables
+        } else if contentRenderables.isEmpty(), let kept = presentedContent.renderables {
+            contentRenderables = kept
+        }
         let topInset = remember { mutableStateOf(0.dp) }
         let density = LocalDensity.current
         // A sheet as UIKit presents it by the window (Flat-Six patch): in a compact height — a phone on its side — it
