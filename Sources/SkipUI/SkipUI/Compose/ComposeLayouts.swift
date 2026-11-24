@@ -219,6 +219,7 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
     // the screen's side — and put each right a frame and a level at a time. A view at its box's edge is at the edge after
     // a resize as before it, and only a view at an edge reaches.
     let layoutBox = EnvironmentValues.shared._layoutBoxPx
+    let presentationPlace = EnvironmentValues.shared._presentationPlace
     let slotState = remember { mutableStateOf<Rect?>(nil) }
     var slotLeft = safeArea.safeBoundsPx.left
     var slotRight = safeArea.safeBoundsPx.right
@@ -291,10 +292,25 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
         return ComposeResult.ok
     } in: {
         Layout(modifier: modifier.onGloballyPositionedInWindow {
+            // The view measured against the presentation as it now stands (Flat-Six patch: PresentationPlace): the safe
+            // area was made from where the presentation was a frame before, and a presentation in motion — a sheet or a
+            // full-screen cover sliding up — has travelled since, its views with it. Read against the old place, a view
+            // at the top was off the safe area's edge by a frame's travel: it reached up by the status bar's height less
+            // that travel — nothing while the cover was quick, a white band over a page's coloured cap, and all of it
+            // once it stopped, a jump — and a last frame's travel as the sheet settled dropped it back for a frame
+            // (Kyle on the Pixel 8a, 2026-11-24: "the edit screen slide in animation is a little janky")
+            var placed = $0
+            if let coordinates = presentationPlace?.coordinates, coordinates.isAttached {
+                let now = coordinates.boundsInWindow()
+                let travel = now.top - safeArea.presentationBoundsPx.top
+                if now != Rect.Zero && abs(travel) > Float(0.5) {
+                    placed = Rect(left: placed.left, top: placed.top - travel, right: placed.right, bottom: placed.bottom - travel)
+                }
+            }
             // where the parent put the view: across, where it lies in its layout box (above); its top and bottom as where
             // they lie against the safe area's (above)
-            var slotLeft = layoutBox != nil ? $0.left - layoutBox!.left : $0.left
-            var slotRight = layoutBox != nil ? layoutBox!.right - $0.right : $0.right
+            var slotLeft = layoutBox != nil ? placed.left - layoutBox!.left : placed.left
+            var slotRight = layoutBox != nil ? layoutBox!.right - placed.right : placed.right
             // A view as wide as its box but off it is in motion — a navigation's slide in or out — and its place is the
             // box's (Flat-Six patch): read where it was for the frame, its reach into a cutout and its inset from it were
             // made anew each frame of a slide, from a place that was not its own, so a table in a list on its way back
@@ -304,13 +320,13 @@ private func flexibleLayoutFloat(_ value: CGFloat?) -> Float? {
                 slotLeft = Float(0.0)
                 slotRight = Float(0.0)
             }
-            let slot = Rect(top: $0.top - safeArea.safeBoundsPx.top, left: slotLeft, bottom: $0.bottom - safeArea.safeBoundsPx.bottom, right: slotRight)
+            let slot = Rect(top: placed.top - safeArea.safeBoundsPx.top, left: slotLeft, bottom: placed.bottom - safeArea.safeBoundsPx.bottom, right: slotRight)
             let known = slotState.value
             if known == nil || abs(known!.left - slot.left) > Float(0.5) || abs(known!.right - slot.right) > Float(0.5) || abs(known!.top - slot.top) > Float(0.5) || abs(known!.bottom - slot.bottom) > Float(0.5) {
                 slotState.value = slot
             }
             let probeEdges = expandInto.union(checkEdges)
-            let newEdges = adjacentSafeAreaEdges(bounds: $0, safeArea: safeArea, isRTL: isRTL, checkEdges: probeEdges, bottomTolerancePx: effectiveBottomAdjacencyTolerancePx)
+            let newEdges = adjacentSafeAreaEdges(bounds: placed, safeArea: safeArea, isRTL: isRTL, checkEdges: probeEdges, bottomTolerancePx: effectiveBottomAdjacencyTolerancePx)
             if !logTag.isEmpty {
                 let previous = edgesState.value
                 if newEdges != previous {

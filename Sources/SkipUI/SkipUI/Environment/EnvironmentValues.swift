@@ -947,6 +947,13 @@ extension EnvironmentValues {
         set { setBuiltinValue(key: "_layoutBoxPx", value: newValue, defaultValue: { nil }) }
     }
 
+    /// Where the presentation is as its views are placed (Flat-Six patch: PresentationPlace) — so that a view measures its
+    /// place against the presentation as it now stands, a sheet in motion included (IgnoresSafeAreaLayout)
+    var _presentationPlace: PresentationPlace? {
+        get { builtinValue(key: "_presentationPlace", defaultValue: { nil }) as! PresentationPlace? }
+        set { setBuiltinValue(key: "_presentationPlace", value: newValue, defaultValue: { nil }) }
+    }
+
     /// The window's top inset — its status bar or a cutout there — as the presentation filling the window has it in this
     /// frame (Flat-Six patch): the window manager's in the first frame of a resize, where WindowInsets read while composing
     /// were still the old window's (a navigation bar's estimated height). Nil in a sheet, which has a window of its own

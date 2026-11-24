@@ -20,7 +20,9 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -34,6 +36,14 @@ import kotlin.math.abs
 /// - Parameter clearOfKeyboard: Whether the presentation's container already keeps it clear of the keyboard (Flat-Six
 ///     patch): Material's modal bottom sheet pads its content for the keyboard itself, so a root in one does not — it had,
 ///     and a form in a sheet stood shrunk by the keyboard twice, white from the row in use to the keyboard's top.
+/// Where a presentation is as its views are placed (Flat-Six patch: IgnoresSafeAreaLayout) — its root's own layout
+/// coordinates, read as each view in it is placed. The safe area a presentation gives its content is made from where the
+/// presentation was when the content was composed, a frame before; a presentation in motion — a sheet or a full-screen
+/// cover sliding up — is a frame's travel off that by the time its views are placed.
+final class PresentationPlace {
+    var coordinates: LayoutCoordinates? = nil
+}
+
 @Composable public func PresentationRoot(defaultColorScheme: ColorScheme? = nil, backgroundColor: Color? = nil, absoluteSystemBarEdges systemBarEdges: Edge.Set = .all, followsWindow: Bool = true, clearOfKeyboard: Bool = false, context: ComposeContext, content: @Composable (ComposeContext) -> Void) {
     launchUIApplicationActivity()
 
@@ -43,6 +53,7 @@ import kotlin.math.abs
         let materialColorScheme = preferredColorScheme.value.reduced.colorScheme?.asMaterialTheme() ?? defaultColorScheme?.asMaterialTheme() ?? MaterialTheme.colorScheme
         MaterialTheme(colorScheme: materialColorScheme) {
             let presentationBounds = remember { mutableStateOf(Rect.Zero) }
+            let presentationPlace = remember { PresentationPlace() }
             let density = LocalDensity.current
             let layoutDirection = LocalLayoutDirection.current
             // The side insets — a camera's cutout, a navigation bar on its side — are the safe area's, as the top and bottom
@@ -73,6 +84,7 @@ import kotlin.math.abs
                 .onGloballyPositionedInWindow {
                     presentationBounds.value = $0
                 }
+                .onGloballyPositioned { presentationPlace.coordinates = $0 }
             Box(modifier: rootModifier) {
                 guard presentationBounds.value != Rect.Zero else {
                     return
@@ -121,6 +133,7 @@ import kotlin.math.abs
                     }
                     $0.set_safeArea(safeArea)
                     $0.set_layoutBoxPx(safeBounds)   // the content, padded by the safe area (Flat-Six patch: IgnoresSafeAreaLayout)
+                    $0.set_presentationPlace(presentationPlace)   // where it is as its views are placed (Flat-Six patch)
                     $0.set_windowTopInsetPx(followsWindow ? Float(insetTop) : nil)   // (Flat-Six patch: Navigation's top bar)
                     // A presentation is a new layout root: scroll axes inherited from the presenting
                     // context (e.g. a sheet presented from a button inside a ScrollView) must not
