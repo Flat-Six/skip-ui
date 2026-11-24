@@ -736,8 +736,14 @@ final class DisableScrollToDismissConnection : NestedScrollConnection {
     // Use native Material3-style dialog for all cases. N buttons and text fields supported.
     let cancelBtn = actionRenderables.firstOrNull { ($0.strip() as? Button)?.role == .cancel }
     // Confirm: first destructive, else first non-cancel (primary). Others go to neutralButtons.
-    let confirmRenderable = optionRenderables.firstOrNull { ($0.strip() as? Button)?.role == .destructive }
-        ?? optionRenderables.firstOrNull { ($0.strip() as? Button)?.role != .cancel }
+    // Three buttons or more stand one under another with the confirm first (SkipAlertDialog, Flat-Six patch): there the
+    // confirm is the first option as written, so that the options keep their order, as iOS stacks them — a destructive
+    // answer written after the one the alert leans to stays after it, and keeps its red (the neutral buttons below)
+    let nonCancelRenderables = optionRenderables.filter { ($0.strip() as? Button)?.role != .cancel }
+    let stacked = nonCancelRenderables.size + (cancelBtn == nil ? 0 : 1) > 2
+    let confirmRenderable = stacked ? nonCancelRenderables.firstOrNull()
+        : (optionRenderables.firstOrNull { ($0.strip() as? Button)?.role == .destructive }
+            ?? optionRenderables.firstOrNull { ($0.strip() as? Button)?.role != .cancel })
     let neutralRenderables = optionRenderables.filter { r in
         (r.strip() as? Button)?.role != .cancel && r !== confirmRenderable
     }
@@ -769,7 +775,8 @@ final class DisableScrollToDismissConnection : NestedScrollConnection {
                 let button = s as? Button ?? (s as? Link)?.content
                 let label = button?.label ?? (s as? NavigationLink)?.label
                 let bt = label?.Evaluate(context: contentContext, options: 0).mapNotNull { $0.strip() as? Text }.firstOrNull()
-                androidx.compose.material3.Text(color: tint, text: bt?.localizedTextString() ?? "", style: MaterialTheme.typography.labelLarge)
+                let color = button?.role == .destructive ? MaterialTheme.colorScheme.error : tint
+                androidx.compose.material3.Text(color: color, text: bt?.localizedTextString() ?? "", style: MaterialTheme.typography.labelLarge)
             }
         }
     }
