@@ -145,7 +145,10 @@ final class PresentedContent {
         var contentRenderables = ComposeBuilder.from(content).Evaluate(context: context, options: EvaluateOptions(isKeepNonModified: true).value)
         if isPresentedValue {
             presentedContent.renderables = contentRenderables
-        } else if contentRenderables.isEmpty(), let kept = presentedContent.renderables {
+        } else if let kept = presentedContent.renderables {
+            // on its way out, what was presented, whatever the content says now: an item's is nothing once its item is
+            // nil — and through skip-fuse-ui's bridge it is an empty view, not nothing, so a check for none missed it
+            // (flatsix.27; Kyle's recording on the Pixel 8a, 2026-11-24, 6:12 PM EST: three white frames, then the sheet)
             contentRenderables = kept
         }
         let topInset = remember { mutableStateOf(0.dp) }
