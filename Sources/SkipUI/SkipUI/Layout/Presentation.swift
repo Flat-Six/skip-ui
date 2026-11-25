@@ -310,7 +310,7 @@ final class PresentedContent {
                 // keyboard (imePadding, in its content), and the root padded for it again — a form's list in a sheet
                 // ended a keyboard's height above the keyboard, white from the row in use down, the rows after it never
                 // composed (Kyle on the Pixel 8a: "it flies to near the top and there's a huge white block underneath it")
-                PresentationRoot(backgroundColor: presentationColor, context: presentationContext, absoluteSystemBarEdges: systemBarEdges, followsWindow: false, clearOfKeyboard: true) { context in
+                PresentationRoot(backgroundColor: presentationColor, context: presentationContext, absoluteSystemBarEdges: systemBarEdges, followsWindow: false, clearOfKeyboard: true, startsAsWindow: isFullScreen) { context in
                     EnvironmentValues.shared.setValues {
                         if !isFullScreen {
                             $0.set_sheetDepth(sheetDepth + 1)

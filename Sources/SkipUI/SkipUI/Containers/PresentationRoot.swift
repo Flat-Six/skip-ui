@@ -44,7 +44,7 @@ final class PresentationPlace {
     var coordinates: LayoutCoordinates? = nil
 }
 
-@Composable public func PresentationRoot(defaultColorScheme: ColorScheme? = nil, backgroundColor: Color? = nil, absoluteSystemBarEdges systemBarEdges: Edge.Set = .all, followsWindow: Bool = true, clearOfKeyboard: Bool = false, context: ComposeContext, content: @Composable (ComposeContext) -> Void) {
+@Composable public func PresentationRoot(defaultColorScheme: ColorScheme? = nil, backgroundColor: Color? = nil, absoluteSystemBarEdges systemBarEdges: Edge.Set = .all, followsWindow: Bool = true, clearOfKeyboard: Bool = false, startsAsWindow: Bool = false, context: ComposeContext, content: @Composable (ComposeContext) -> Void) {
     launchUIApplicationActivity()
 
     let preferredColorScheme = rememberSaveable(stateSaver: context.stateSaver as! Saver<Preference<PreferredColorScheme>, Any>) { mutableStateOf(Preference<PreferredColorScheme>(key: PreferredColorSchemePreferenceKey.self)) }
@@ -73,6 +73,13 @@ final class PresentationPlace {
             let configuration = LocalConfiguration.current
             let androidContext = LocalContext.current
             let window = followsWindow ? remember(configuration) { windowNow(androidContext) } : nil
+            // A full-screen presentation is the window's size and place from its first composition (Flat-Six patch): it
+            // waited to be placed before composing anything, and a sheet's content off the screen is not placed — so
+            // its content was first composed as the sheet began to move, its whole first layout in the slide's first
+            // frames (on Android emulators 370 to 505 ms after the sheet's window had composed: Kyle's recordings on the
+            // Pixel 8a, 2026-11-24, the edit round page's slide starting on one frame held, then a jump). It is
+            // composed at once from the window manager's bounds and insets, before the sheet moves
+            let startWindow = startsAsWindow ? remember(configuration) { windowNow(androidContext) } : nil
             var rootModifier = Modifier
                 .background(backgroundColor != nil ? androidx.compose.ui.graphics.Color.Transparent : Color.background.colorImpl())
                 .fillMaxSize()
@@ -86,7 +93,7 @@ final class PresentationPlace {
                 }
                 .onGloballyPositioned { presentationPlace.coordinates = $0 }
             Box(modifier: rootModifier) {
-                guard presentationBounds.value != Rect.Zero else {
+                guard presentationBounds.value != Rect.Zero || startWindow != nil else {
                     return
                 }
                 // Cannot get accurate WindowInsets until we're in the content box
@@ -95,6 +102,13 @@ final class PresentationPlace {
                 var insetBottom = WindowInsets.safeDrawing.getBottom(density)
                 var insetLeft = WindowInsets.safeDrawing.getLeft(density, layoutDirection)
                 var insetRight = WindowInsets.safeDrawing.getRight(density, layoutDirection)
+                if bounds == Rect.Zero, let startWindow {
+                    bounds = Rect(left: Float(0.0), top: Float(0.0), right: startWindow.widthPx, bottom: startWindow.heightPx - Float(keyboardPx))
+                    insetTop = Int(startWindow.topPx)
+                    insetBottom = max(Int(startWindow.bottomPx), keyboardPx)
+                    insetLeft = Int(startWindow.leftPx)
+                    insetRight = Int(startWindow.rightPx)
+                }
                 // The first frame of a resize — a turn, a fold — in the window it is drawn in (Flat-Six patch): the bounds
                 // are learnt from the layout before, and the insets come as the views are laid out, a frame after this
                 // composition, so the whole presentation was made for the old window first — a turned phone's portrait
