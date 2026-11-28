@@ -254,6 +254,7 @@ public final class List : View, Renderable {
         let safeAreaDensity = LocalDensity.current
         let headerSafeAreaPx = with(safeAreaDensity) { arguments.headerSafeAreaHeight.toPx() }
         let footerSafeAreaPx = with(safeAreaDensity) { arguments.footerSafeAreaHeight.toPx() }
+        let anchoredMotion = remember { AnchoredMotion() }
         PreferenceValues.shared.contribute(context: context, key: ScrollToTopPreferenceKey.self, value: ScrollToTopAction(key: reorderableState.listState) {
             coroutineScope.launch {
                 reorderableState.listState.animateScrollToItem(0)
@@ -302,8 +303,22 @@ public final class List : View, Renderable {
                 }
                 if animated {
                     // on the rows' own spring — animateItem's placement, Compose's medium-low stiffness — so the scroll and
-                    // the rows it brings in settle together: its default, four times as stiff, was done while they came
-                    listState.animateScrollBy(delta, animationSpec: spring(stiffness: Float(400.0)))
+                    // the rows it brings in settle together: its default, four times as stiff, was done while they came.
+                    // A scroll that takes over from one still under way — a target worked out again as rows are laid out
+                    // — goes on at its speed: started from rest, each stopped the list dead and set off again (Flat-Six
+                    // patch, 1.63.0-flatsix.31). The speed of a scroll whose last frame is gone a tenth of a second is
+                    // none: a person's fling or drag has had the list since.
+                    // SKIP INSERT: val carried = if (System.nanoTime() - anchoredMotion.at < 100_000_000L) anchoredMotion.velocity else 0f
+                    // SKIP INSERT: listState.scroll {
+                    // SKIP INSERT:     var previous = 0f
+                    // SKIP INSERT:     animate(initialValue = 0f, targetValue = delta, initialVelocity = carried, animationSpec = spring(stiffness = 400f)) { value, velocity ->
+                    // SKIP INSERT:         scrollBy(value - previous)
+                    // SKIP INSERT:         previous = value
+                    // SKIP INSERT:         anchoredMotion.velocity = velocity
+                    // SKIP INSERT:         anchoredMotion.at = System.nanoTime()
+                    // SKIP INSERT:     }
+                    // SKIP INSERT: }
+                    // SKIP INSERT: anchoredMotion.velocity = 0f
                 } else {
                     listState.scrollBy(delta)
                 }
@@ -813,6 +828,13 @@ public final class List : View, Renderable {
         // Prefer explicit Section/ForEach identity so chrome animation state follows the section
         // across insertions and deletions instead of sticking to a numeric position.
         return "id-\(composeBundleString(for: sectionIdentity))"
+    }
+
+    /// The anchored scroll under way, inside withAnimation: its speed at its last frame and when that was, so a scroll
+    /// that takes over from it goes on at that speed (Flat-Six patch).
+    final class AnchoredMotion {
+        var velocity: Float = Float(0.0)
+        var at: Int64 = Int64(0)
     }
 
     /// Tracks section chrome placement separately from row animation state.
