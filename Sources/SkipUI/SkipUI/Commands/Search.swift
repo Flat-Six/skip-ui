@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -171,6 +172,17 @@ let searchFieldHeight = 36.0   // iOS's (Flat-Six patch; Material's outlined fie
             focusManager.clearFocus()
             state.isSearching.value = false
         }
+    }
+    // The system's back with a search under way ends it, as Cancel does (Flat-Six patch) — Material's search view
+    // collapses at a back, and iOS's Cancel clears the field and leaves the search. The keyboard's own back comes first,
+    // the system's: then this, before whatever is under it — a sheet the search is in took the back and closed with
+    // the search still up (Kyle, 2026-11-28, on his Pixel, of Help: "system back from help with search typed dismisses
+    // the keyboard but still shows the search results. another back dismisses the help sheet")
+    BackHandler(enabled: state.isSearching.value == true || state.text.wrappedValue.isEmpty == false) {
+        state.text.wrappedValue = ""
+        focusManager.clearFocus()
+        state.isSearching.value = false
+        state.isPresented?.wrappedValue = false
     }
     // iOS's search field (Flat-Six patch): 36 dp, rounded, on the tertiary system fill, the magnifier and the prompt
     // inside it, a filled clear button once there is text — in place of Material's outlined capsule
